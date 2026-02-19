@@ -1,0 +1,93 @@
+-- blackvideo_player.gpr
+-- Cross-platform GPR project file for BlackVideo Mini Player
+-- Supports: Windows, Linux, macOS
+
+project BlackVideo_Player is
+
+   -- ─────────────────────────────────────────────
+   --  OS Detection
+   -- ─────────────────────────────────────────────
+   type OS_Kind is ("windows", "linux", "macos");
+   OS : OS_Kind := external ("OS_TARGET", "linux");
+
+   -- ─────────────────────────────────────────────
+   --  Source Directories
+   -- ─────────────────────────────────────────────
+   for Source_Dirs use (
+      "src/**",
+      "bindings/ffmpeg",
+      "bindings/sdl2"
+                       );
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj";
+   -- for Object_Dir  use "build/obj";
+   for Exec_Dir    use "build";
+   for Main        use ("main.adb");
+
+   -- ─────────────────────────────────────────────
+   --  Library Search Paths (OS-specific)
+   -- ─────────────────────────────────────────────
+   package Linker is
+      case OS is
+         when "windows" =>
+            for Linker_Options use (
+               "-Llib",
+               "-lSDL2",
+               "-lavcodec",
+               "-lavformat",
+               "-lavutil",
+               "-lswscale",
+               "-lswresample",
+               "-lmingw32",
+               "-mwindows"
+            );
+         when "linux" =>
+            for Linker_Options use (
+               "-lSDL2",
+               "-lavcodec",
+               "-lavformat",
+               "-lavutil",
+               "-lswscale",
+               "-lswresample",
+               "-lpthread",
+               "-ldl",
+               "-lm"
+            );
+         when "macos" =>
+            for Linker_Options use (
+               "-lSDL2",
+               "-lavcodec",
+               "-lavformat",
+               "-lavutil",
+               "-lswscale",
+               "-lswresample",
+               "-framework", "CoreFoundation",
+               "-framework", "AudioToolbox",
+               "-framework", "CoreVideo"
+            );
+      end case;
+   end Linker;
+
+   -- ─────────────────────────────────────────────
+   --  Compiler Switches
+   -- ─────────────────────────────────────────────
+   package Compiler is
+      for Default_Switches ("Ada") use (
+         "-g",
+         "-O2",
+         "-gnat2022",
+         "-gnatwa",
+         "-gnatQ",
+         "-Wall"
+      );
+   end Compiler;
+
+   -- ─────────────────────────────────────────────
+   --  Builder
+   -- ─────────────────────────────────────────────
+   package Builder is
+      for Executable ("main.adb") use "blackvideo-player";
+      for Default_Switches ("Ada") use ("-j0");  -- parallel build
+   end Builder;
+
+end BlackVideo_Player;

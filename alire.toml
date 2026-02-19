@@ -1,0 +1,15 @@
+[general]
+name = "blackvideo_player"
+description = "BlackVideo Mini Support Player - Cross-platform video player using Ada + SDL2 + FFmpeg"
+version = "1.0.0"
+authors = ["BlackVideo Team"]
+licenses = "MIT"
+maintainers = ["blackvideo@example.com"]
+maintainers-logins = []
+
+[build-switches]
+release.optimization = "performance"
+
+[dependencies]
+# Ada standard library is included by default with GNAT
+# SDL2 and FFmpeg are linked via GPR project file (external libraries)

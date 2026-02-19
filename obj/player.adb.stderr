@@ -1,0 +1,21 @@
+player.adb:9:06: error: file "sdl.ads" not found
+player.adb:9:06: warning: unit "SDL" is not referenced [-gnatwu]
+player.adb:10:06: error: file "sdl-video.ads" not found
+player.adb:10:15: warning: unit "SDL.Video.Windows" is not referenced [-gnatwu]
+player.adb:11:06: error: file "sdl-video.ads" not found
+player.adb:11:15: warning: unit "SDL.Video.Renderers" is not referenced [-gnatwu]
+player.adb:12:06: error: file "sdl-video.ads" not found
+player.adb:12:15: warning: unit "SDL.Video.Textures" is not referenced [-gnatwu]
+player.adb:13:06: error: file "sdl-events.ads" not found
+player.adb:13:09: warning: unit "SDL.Events" is not referenced [-gnatwu]
+player.adb:14:06: error: file "sdl-events-keyboards.ads" not found
+player.adb:14:16: warning: unit "SDL.Events.Keyboards" is not referenced [-gnatwu]
+player.adb:15:06: error: file "sdl-audio.ads" not found
+player.adb:15:09: warning: unit "SDL.Audio" is not referenced [-gnatwu]
+player.adb:18:06: error: file "sdl-video.ads" not found
+player.adb:18:06: error: "Player (body)" depends on "Renderer (spec)"
+player.adb:18:06: error: "Renderer (spec)" depends on "Sdl.Video (spec)"
+player.adb:20:06: warning: unit "Utils" is not referenced [-gnatwu]
+player.adb:98:18: error: invalid prefix in selected component "Event"
+player.adb:172:12: error: invalid prefix in selected component "Key"
+renderer.ads:13:16: error: "SDL" is undefined (more references follow)

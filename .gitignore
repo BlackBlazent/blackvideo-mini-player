@@ -1,0 +1,9 @@
+build/
+*.o
+*.ali
+*.exe
+*.dll
+*.so
+*.dylib
+alire/
+.alire/
