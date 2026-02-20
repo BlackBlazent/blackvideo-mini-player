@@ -1,7 +1,7 @@
 # BlackVideo Mini Player
 
 Lightweight cross-platform video player (Ada + SDL2 + FFmpeg).  
-Support player for the BlackVideo Tauri v2 app. Works standalone via **CLI** or **right-click** on any video file.
+Support player for the [BlackVideo](https://github.com/BlackBlazent/BlackVideo). Works standalone via **CLI** or **right-click** on any video file.
 
 ---
 
