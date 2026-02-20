@@ -1,0 +1,61 @@
+# Dependabot configuration for BlackVideo Mini Player
+# This file configures automated dependency updates and security scanning
+
+version: 2
+updates:
+
+  # GitHub Actions workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "10:00"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "ci"
+      - "github-actions"
+
+  # Git submodules (if any for external libraries)
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "08:00"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "submodule"
+      include: "scope"
+    labels:
+      - "submodules"
+      - "dependencies"
+
+  # Docker dependencies (if you add Dockerfile in future)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "11:00"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "docker"
+      - "dependencies"
+
+# Configure Dependabot to auto-merge minor/patch updates
+# Uncomment the following section if you want auto-merge enabled
+# auto-merge:
+#   - dependency-type: "production"
+#     update-type: "semver:patch"
+#   - dependency-type: "production"
+#     update-type: "semver:minor"
+
+# Note: Security alerts are enabled by default in repository settings
+# Configure them in GitHub repository settings under Security & Analysis

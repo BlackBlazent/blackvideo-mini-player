@@ -3,6 +3,7 @@ build/
 *.ali
 *.exe
 *.dll
+*.a
 *.so
 *.dylib
 alire/

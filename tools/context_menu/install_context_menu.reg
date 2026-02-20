@@ -1,0 +1,159 @@
+Windows Registry Editor Version 5.00
+
+; ============================================================
+; BlackVideo Mini Player — Windows Right-Click Context Menu
+;
+; This adds "Open with BlackVideo Player" to the right-click
+; menu for all common video file extensions.
+;
+; INSTALL:
+;   Double-click this file → click Yes
+;   OR run:  regedit /s install_context_menu.reg
+;
+; UNINSTALL:
+;   Double-click uninstall_context_menu.reg
+;   OR run the uninstall batch file.
+;
+; Adjust the path below to match your actual .exe location.
+; The default assumes it's installed at:
+;   C:\BlackVideo\blackvideo-player.exe
+; ============================================================
+
+; ─────────────────────────────────────────────────────────────
+;  Register the application command (shared by all extensions)
+; ─────────────────────────────────────────────────────────────
+
+[HKEY_CLASSES_ROOT\Applications\blackvideo-player.exe]
+@="BlackVideo Mini Player"
+
+[HKEY_CLASSES_ROOT\Applications\blackvideo-player.exe\shell]
+
+[HKEY_CLASSES_ROOT\Applications\blackvideo-player.exe\shell\open]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\Applications\blackvideo-player.exe\shell\open\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+; ─────────────────────────────────────────────────────────────
+;  Video extensions — add to right-click "Open with" list
+; ─────────────────────────────────────────────────────────────
+
+; MP4
+[HKEY_CLASSES_ROOT\.mp4\OpenWithList\blackvideo-player.exe]
+@=""
+
+; MKV
+[HKEY_CLASSES_ROOT\.mkv\OpenWithList\blackvideo-player.exe]
+@=""
+
+; AVI
+[HKEY_CLASSES_ROOT\.avi\OpenWithList\blackvideo-player.exe]
+@=""
+
+; MOV
+[HKEY_CLASSES_ROOT\.mov\OpenWithList\blackvideo-player.exe]
+@=""
+
+; WMV
+[HKEY_CLASSES_ROOT\.wmv\OpenWithList\blackvideo-player.exe]
+@=""
+
+; WebM
+[HKEY_CLASSES_ROOT\.webm\OpenWithList\blackvideo-player.exe]
+@=""
+
+; FLV
+[HKEY_CLASSES_ROOT\.flv\OpenWithList\blackvideo-player.exe]
+@=""
+
+; M4V
+[HKEY_CLASSES_ROOT\.m4v\OpenWithList\blackvideo-player.exe]
+@=""
+
+; TS (transport stream)
+[HKEY_CLASSES_ROOT\.ts\OpenWithList\blackvideo-player.exe]
+@=""
+
+; MPG / MPEG
+[HKEY_CLASSES_ROOT\.mpg\OpenWithList\blackvideo-player.exe]
+@=""
+
+[HKEY_CLASSES_ROOT\.mpeg\OpenWithList\blackvideo-player.exe]
+@=""
+
+; ─────────────────────────────────────────────────────────────
+;  Also add a dedicated "Open with BlackVideo" shell command
+;  directly on each extension (shows as named option, not just
+;  buried in "Open with" submenu).
+; ─────────────────────────────────────────────────────────────
+
+[HKEY_CLASSES_ROOT\.mp4\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.mp4\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.mkv\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.mkv\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.avi\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.avi\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.mov\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.mov\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.wmv\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.wmv\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.webm\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.webm\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.flv\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.flv\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.m4v\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.m4v\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.mpg\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.mpg\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.mpeg\shell\BlackVideoPlayer]
+@="Open with BlackVideo Player"
+"Icon"="C:\\BlackVideo\\blackvideo-player.exe,0"
+
+[HKEY_CLASSES_ROOT\.mpeg\shell\BlackVideoPlayer\command]
+@="\"C:\\BlackVideo\\blackvideo-player.exe\" \"%1\""

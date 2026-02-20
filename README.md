@@ -1,44 +1,56 @@
 # BlackVideo Mini Player
 
-A lightweight, cross-platform support video player built with **Ada + SDL2 + FFmpeg**.  
-Designed as a companion executable for the BlackVideo Tauri v2 app.
+Lightweight cross-platform video player (Ada + SDL2 + FFmpeg).  
+Support player for the BlackVideo Tauri v2 app. Works standalone via **CLI** or **right-click** on any video file.
 
 ---
 
-## Architecture
+## File Structure
 
 ```
 blackvideo-mini-player/
 │
 ├── src/
-│   ├── main.adb              ← Entry point, CLI argument parsing
-│   ├── player.ads / .adb     ← Core orchestrator (event loop, state machine)
-│   ├── video_decoder.ads/.adb← FFmpeg decode: open, read, decode, YUV→RGB
-│   ├── renderer.ads / .adb   ← SDL2 texture upload, aspect-ratio draw
-│   ├── audio.ads / .adb      ← SDL2 audio callback, volume, mute
-│   └── utils.ads / .adb      ← Helpers: base_name, format_time
+│   ├── main.adb                  ← Entry point
+│   ├── player.ads / .adb         ← Core orchestrator + event loop
+│   ├── video_decoder.ads / .adb  ← FFmpeg decode pipeline
+│   ├── renderer.ads / .adb       ← SDL2 texture rendering (letterbox)
+│   ├── audio.ads / .adb          ← SDL2 audio callback + volume/mute
+│   └── utils.ads / .adb          ← Base_Name, Format_Time
 │
 ├── bindings/
 │   ├── ffmpeg/
-│   │   ├── ffmpeg-avformat.ads   ← libavformat (open, read, seek, close)
-│   │   ├── ffmpeg-avcodec.ads    ← libavcodec (decode, packet, context)
-│   │   ├── ffmpeg-avutil.ads     ← libavutil (AVFrame, pixel formats)
-│   │   ├── ffmpeg-swscale.ads    ← libswscale (YUV → RGB conversion)
-│   │   └── ffmpeg-swresample.ads ← libswresample (audio resampling)
+│   │   ├── ffmpeg-avutil.ads       ← libavutil (AVFrame, pixel formats)
+│   │   ├── ffmpeg-avcodec.ads      ← libavcodec (decode, context, packet)
+│   │   ├── ffmpeg-avformat.ads     ← libavformat (container open/read/seek)
+│   │   ├── ffmpeg-swscale.ads      ← libswscale (YUV→RGB)
+│   │   └── ffmpeg-swresample.ads   ← libswresample (audio resample)
 │   └── sdl2/
-│       ├── sdl.ads               ← SDL_Init, SDL_Quit, SDL_Delay
-│       ├── sdl-video.ads/.adb    ← Windows, Renderers, Textures
-│       ├── sdl-events.ads/.adb   ← SDL_PollEvent, keyboard, window events
-│       └── sdl-audio.ads         ← SDL_OpenAudioDevice, audio callback
+│       ├── sdl.ads                 ← SDL_Init / Quit / Delay
+│       ├── sdl-video.ads           ← SDL.Video shared types (handles, SDL_Rect)
+│       ├── sdl-video-windows.ads/adb    ← SDL.Video.Windows (child package)
+│       ├── sdl-video-renderers.ads/adb  ← SDL.Video.Renderers
+│       ├── sdl-video-textures.ads/adb   ← SDL.Video.Textures
+│       ├── sdl-events.ads/adb      ← SDL.Events (flat byte extractor)
+│       ├── sdl-events-keyboards.ads← SDL.Events.Keyboards (keycodes)
+│       └── sdl-audio.ads           ← SDL.Audio (callback, device)
 │
+├── tools/
+│   └── context_menu/
+│       ├── install_context_menu.bat    ← Windows: installs right-click (run as admin)
+│       ├── install_context_menu.reg    ← Windows: manual .reg import
+│       ├── uninstall_context_menu.bat  ← Windows: remove right-click
+│       ├── uninstall_context_menu.reg
+│       ├── install_linux.sh            ← Linux: installs binary + .desktop
+│       ├── blackvideo-player.desktop   ← Linux: MIME association file
+│       └── install_macos.sh            ← macOS: creates Quick Action service
+│
+├── lib/              ← Put Windows DLLs / import libs here
+├── build/            ← Compiled output goes here
 ├── scripts/
-│   ├── build.sh              ← Linux / macOS build script
-│   └── build.bat             ← Windows build script
-│
-├── lib/                      ← Put Windows DLLs here
-├── build/                    ← Output: blackvideo-player[.exe]
-├── alire.toml
-└── blackvideo_player.gpr     ← GPR project (cross-platform)
+│   ├── build.bat     ← Windows build (auto-finds gprbuild)
+│   └── build.sh      ← Linux/macOS build
+└── blackvideo_player.gpr   ← GNAT project file
 ```
 
 ---
@@ -48,188 +60,168 @@ blackvideo-mini-player/
 | Key | Action |
 |-----|--------|
 | `SPACE` | Play / Pause |
-| `LEFT` | Seek −5 seconds |
-| `RIGHT` | Seek +5 seconds |
-| `UP` | Volume +10% |
-| `DOWN` | Volume −10% |
+| `←` | Seek −5 seconds |
+| `→` | Seek +5 seconds |
+| `↑` | Volume +10 |
+| `↓` | Volume −10 |
 | `M` | Mute / Unmute |
-| `F` | Toggle Fullscreen |
+| `F` | Fullscreen toggle |
 | `ESC` / `Q` | Quit |
 
 ---
 
 ## Building
 
-### Prerequisites
+### Windows
 
-#### Linux (Ubuntu / Debian)
+#### Prerequisites
+1. Install [Alire](https://alire.ada.dev/) (GNAT + gprbuild)
+   ```
+   alr toolchain --select
+   ```
+2. Download [SDL2 development libraries](https://github.com/libsdl-org/SDL/releases) (MinGW version)
+3. Download [FFmpeg shared builds](https://github.com/BtbN/FFmpeg-Builds/releases) (win64-lgpl)
+4. From the SDL2 zip, copy `lib/x64/libSDL2.dll.a` → your project's `lib/libSDL2.a`
+5. From the FFmpeg zip, copy `lib/*.lib` (or `lib/*.a`) → your project's `lib/`
+6. Copy all `.dll` files to `build/` (beside the final `.exe`)
+
+#### Build
+```bat
+cd blackvideo-mini-player
+scripts\build.bat
+```
+
+> **If gprbuild is not on PATH:** The script searches common Alire install locations automatically. If it still can't find it, add the `bin\` folder of your GNAT toolchain to your user PATH in System → Environment Variables. The toolchain folder is usually:  
+> `%LOCALAPPDATA%\alire\toolchains\gnat_native_X.X.X_...\bin`
+
+#### Run
+```bat
+build\blackvideo-player.exe "C:\Videos\movie.mp4"
+```
+
+---
+
+### Linux
+
 ```bash
 sudo apt install gnat gprbuild \
     libsdl2-dev \
     libavcodec-dev libavformat-dev libavutil-dev \
     libswscale-dev libswresample-dev
-```
 
-#### macOS (Homebrew)
-```bash
-brew install gnat gprbuild sdl2 ffmpeg
-```
-
-#### Windows (MSYS2 + GNAT)
-1. Install [Alire](https://alire.ada.dev/) for GNAT + gprbuild
-2. Install [SDL2](https://github.com/libsdl-org/SDL/releases) development libraries
-3. Install [FFmpeg shared builds](https://github.com/BtbN/FFmpeg-Builds/releases)
-4. Place DLLs in `lib/`
-
----
-
-### Build Commands
-
-**Linux / macOS:**
-```bash
 chmod +x scripts/build.sh
 ./scripts/build.sh
+
+./build/blackvideo-player /path/to/video.mp4
 ```
 
-**Windows:**
-```batch
-scripts\build.bat
-```
+### macOS
 
-**Manual (any OS):**
 ```bash
-mkdir -p build/obj
-gprbuild -P blackvideo_player.gpr -XOS_TARGET=linux -j0
-# Replace linux with: windows | macos
+brew install gnat gprbuild sdl2 ffmpeg
+chmod +x scripts/build.sh
+./scripts/build.sh
+
+./build/blackvideo-player /path/to/video.mp4
 ```
 
 ---
 
-## Running
+## Using in GNAT Studio
 
-```bash
-# Linux / macOS
-./build/blackvideo-player /path/to/video.mp4
+1. Open `blackvideo_player.gpr` with GNAT Studio (File → Open Project)
+2. Make sure bindings are visible: Project shows `src`, `bindings/ffmpeg`, `bindings/sdl2`
+3. Build: Build menu → Build All  (or press F4)
+4. Set scenario variable `OS_TARGET` to `windows` in the Scenario panel
 
-# Windows
-build\blackvideo-player.exe C:\Videos\movie.mp4
+> **Why each binding is its own file:** Ada's file-naming convention requires that package `SDL.Video.Windows` lives in `sdl-video-windows.ads`. GNAT cannot find child packages inside a parent file — each child unit must have its own `.ads` / `.adb` pair.
 
-# Show help
-./build/blackvideo-player --help
+---
+
+## Right-Click Integration
+
+### Windows (Run as Administrator)
+```
+tools\context_menu\install_context_menu.bat
+```
+This auto-detects `blackvideo-player.exe` and adds "Open with BlackVideo Player" to the right-click menu for: `.mp4 .mkv .avi .mov .wmv .webm .flv .m4v .mpg .mpeg .ts`
+
+To remove:
+```
+tools\context_menu\uninstall_context_menu.bat
 ```
 
-**Supported formats:** MP4, MKV, AVI, MOV, WebM, and anything FFmpeg can open.
+### Linux (Nautilus, Dolphin, Thunar, Nemo...)
+```bash
+chmod +x tools/context_menu/install_linux.sh
+./tools/context_menu/install_linux.sh
+```
+Installs to `/usr/local/bin` and registers a `.desktop` file with MIME types.
+
+### macOS (Finder right-click → Services)
+```bash
+chmod +x tools/context_menu/install_macos.sh
+./tools/context_menu/install_macos.sh
+```
+Creates an Automator Quick Action. Right-click video → Services → "Open with BlackVideo Player".
 
 ---
 
 ## Tauri v2 Integration
 
-### Step 1: Copy the binary
-
-```
-your-tauri-project/
- └── src-tauri/
-      └── binaries/
-           ├── blackvideo-player-x86_64-pc-windows-msvc.exe   ← Windows
-           ├── blackvideo-player-x86_64-unknown-linux-gnu      ← Linux
-           └── blackvideo-player-x86_64-apple-darwin           ← macOS
-```
-
-> Tauri v2 requires the target triple suffix on sidecar binaries.
-
-### Step 2: Register in tauri.conf.json
-```json
-{
-  "bundle": {
-    "externalBin": [
-      "binaries/blackvideo-player"
-    ],
-    "resources": [
-      "binaries/SDL2.dll",
-      "binaries/avcodec-61.dll",
-      "binaries/avformat-61.dll",
-      "binaries/avutil-59.dll",
-      "binaries/swscale-8.dll"
-    ]
-  }
+```toml
+# tauri.conf.json
+"bundle": {
+  "externalBin": ["binaries/blackvideo-player"],
+  "resources": [
+    "binaries/SDL2.dll",
+    "binaries/avcodec-61.dll",
+    "binaries/avformat-61.dll",
+    "binaries/avutil-59.dll",
+    "binaries/swscale-8.dll"
+  ]
 }
 ```
 
-### Step 3: Launch from Rust
 ```rust
 use tauri::api::process::Command;
 
 #[tauri::command]
 fn open_video(path: String) {
     Command::new_sidecar("blackvideo-player")
-        .expect("Failed to find sidecar")
+        .expect("sidecar not found")
         .args([path])
         .spawn()
-        .expect("Failed to launch player");
+        .expect("failed to launch player");
 }
 ```
 
 ---
 
-## Design Notes
+## Windows DLLs Required
 
-### How YUV → RGB conversion works
+Place beside `blackvideo-player.exe` (in `build\`):
 
-```
-FFmpeg decodes video → YUV420P frames (raw from codec)
-        ↓
-libswscale sws_scale() → converts to RGB24
-        ↓
-SDL2 streaming texture → GPU upload
-        ↓
-SDL2 RenderCopy with aspect-ratio rect → screen
-```
-
-### Audio pipeline
-
-```
-FFmpeg av_read_frame (audio packets)
-        ↓
-avcodec_receive_frame (PCM data)
-        ↓
-swresample → S16 stereo 44100 Hz
-        ↓
-SDL2 audio callback fills the device buffer
-        ↓
-OS audio driver → speakers
-```
-
-### Aspect ratio (letterbox / pillarbox)
-
-The renderer always fits the video inside the window using:
-```
-scale = min(window_w / video_w, window_h / video_h)
-dest_w = video_w * scale
-dest_h = video_h * scale
-dest_x = (window_w - dest_w) / 2
-dest_y = (window_h - dest_h) / 2
-```
-Black bars fill the unused area automatically.
-
----
-
-## Windows DLL List
-
-Place these beside `blackvideo-player.exe`:
-
-| DLL | From |
-|-----|------|
-| `SDL2.dll` | SDL2 release page |
+| DLL | Source |
+|-----|--------|
+| `SDL2.dll` | SDL2 release page (MinGW) |
 | `avcodec-61.dll` | FFmpeg shared build |
 | `avformat-61.dll` | FFmpeg shared build |
 | `avutil-59.dll` | FFmpeg shared build |
 | `swscale-8.dll` | FFmpeg shared build |
 | `swresample-5.dll` | FFmpeg shared build |
 
-Version numbers may differ; always match your FFmpeg build version.
+Version numbers depend on your FFmpeg build — match what you downloaded.
 
 ---
 
-## License
+## Design Notes
 
-MIT — free to use.
+**Why flat byte extraction for SDL events?**  
+Ada's discriminated unions cannot map to C's anonymous unions without `Unchecked_Union`, which makes field access unsafe at compile time. The flat `Raw_Bytes` + offset extractors in `SDL.Events` are simpler, safer, and work identically on all platforms.
+
+**Why child packages have separate files?**  
+GNAT maps Ada package `Foo.Bar.Baz` to file `foo-bar-baz.ads`. You cannot embed child package specs inside a parent file — GNAT will report "file not found" for any `with Foo.Bar.Baz` that doesn't have its own file.
+
+**Letterbox rendering:**  
+`Renderer.Fit_Rect` computes `scale = min(win_w/vid_w, win_h/vid_h)` and centres the video with black bars, preserving the original aspect ratio on any window size or fullscreen resolution.

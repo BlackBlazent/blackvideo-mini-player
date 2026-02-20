@@ -1,0 +1,38 @@
+Windows Registry Editor Version 5.00
+
+; ============================================================
+; BlackVideo Mini Player — Remove Right-Click Context Menu
+; Double-click to uninstall, or: regedit /s uninstall_context_menu.reg
+; ============================================================
+
+[-HKEY_CLASSES_ROOT\Applications\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.mp4\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.mp4\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.mkv\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.mkv\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.avi\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.avi\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.mov\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.mov\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.wmv\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.wmv\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.webm\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.webm\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.flv\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.flv\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.m4v\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.m4v\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.mpg\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.mpg\OpenWithList\blackvideo-player.exe]
+
+[-HKEY_CLASSES_ROOT\.mpeg\shell\BlackVideoPlayer]
+[-HKEY_CLASSES_ROOT\.mpeg\OpenWithList\blackvideo-player.exe]

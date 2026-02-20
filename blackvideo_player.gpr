@@ -1,46 +1,52 @@
 -- blackvideo_player.gpr
--- Cross-platform GPR project file for BlackVideo Mini Player
--- Supports: Windows, Linux, macOS
+-- Cross-platform GPR project: Windows / Linux / macOS
+-- GNAT Studio compatible (no ** glob, explicit source dirs)
 
 project BlackVideo_Player is
 
    -- ─────────────────────────────────────────────
-   --  OS Detection
+   --  OS Detection  (pass -XOS_TARGET=windows|linux|macos)
    -- ─────────────────────────────────────────────
    type OS_Kind is ("windows", "linux", "macos");
-   OS : OS_Kind := external ("OS_TARGET", "linux");
+   OS : OS_Kind := external ("OS_TARGET", "windows");
 
    -- ─────────────────────────────────────────────
-   --  Source Directories
+   --  Source Directories  (explicit — no ** wildcard)
    -- ─────────────────────────────────────────────
    for Source_Dirs use (
-      "src/**",
+      "src",
       "bindings/ffmpeg",
       "bindings/sdl2"
-                       );
-   for Source_Dirs use ("src");
-   for Object_Dir use "obj";
-   -- for Object_Dir  use "build/obj";
-   for Exec_Dir    use "build";
-   for Main        use ("main.adb");
+   );
+
+   for Object_Dir use "build/obj";
+   for Exec_Dir   use "build";
+   for Main       use ("main.adb");
 
    -- ─────────────────────────────────────────────
-   --  Library Search Paths (OS-specific)
+   --  Library / Linker (OS-specific)
    -- ─────────────────────────────────────────────
    package Linker is
       case OS is
+
          when "windows" =>
             for Linker_Options use (
-               "-Llib",
-               "-lSDL2",
-               "-lavcodec",
+               "-Llib",                  -- search lib\ first
+               "-lSDL2",                 -- libSDL2.a  (from SDL2-devel MinGW)
+               "-lavcodec",              -- libavcodec.dll.a  (FFmpeg shared)
                "-lavformat",
                "-lavutil",
                "-lswscale",
                "-lswresample",
-               "-lmingw32",
+               "-lole32",
+               "-loleaut32",
+               "-lwinmm",
+               "-lversion",
+               "-limm32",
+               "-lsetupapi",
                "-mwindows"
             );
+
          when "linux" =>
             for Linker_Options use (
                "-lSDL2",
@@ -53,6 +59,7 @@ project BlackVideo_Player is
                "-ldl",
                "-lm"
             );
+
          when "macos" =>
             for Linker_Options use (
                "-lSDL2",
@@ -63,22 +70,23 @@ project BlackVideo_Player is
                "-lswresample",
                "-framework", "CoreFoundation",
                "-framework", "AudioToolbox",
-               "-framework", "CoreVideo"
+               "-framework", "CoreVideo",
+               "-framework", "Cocoa"
             );
+
       end case;
    end Linker;
 
    -- ─────────────────────────────────────────────
-   --  Compiler Switches
+   --  Compiler
    -- ─────────────────────────────────────────────
    package Compiler is
       for Default_Switches ("Ada") use (
          "-g",
          "-O2",
-         "-gnat2022",
-         "-gnatwa",
-         "-gnatQ",
-         "-Wall"
+         "-gnat2012",      -- use 2012 for widest GNAT compatibility
+         "-gnatwa",        -- all warnings
+         "-gnatQ"          -- continue on errors (see all errors at once)
       );
    end Compiler;
 
@@ -87,7 +95,14 @@ project BlackVideo_Player is
    -- ─────────────────────────────────────────────
    package Builder is
       for Executable ("main.adb") use "blackvideo-player";
-      for Default_Switches ("Ada") use ("-j0");  -- parallel build
+      for Default_Switches ("Ada") use ("-j0");   -- use all CPU cores
    end Builder;
+
+   -- ─────────────────────────────────────────────
+   --  IDE / GNAT Studio
+   -- ─────────────────────────────────────────────
+   package IDE is
+      for VCS_Kind use "Git";
+   end IDE;
 
 end BlackVideo_Player;

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Locations >
   <Project>
-    <vfs_file>C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    <vfs_file />
     <file_marker column=" 1" line=" 1" >
       <vfs_project />
       <vfs_file>C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
@@ -53,6 +53,61 @@
     <file_marker current="true" column=" 6" line=" 9" >
       <vfs_project>C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_project>
       <vfs_file>C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\player.adb</vfs_file>
+    </file_marker>
+  </Project>
+  <Project >
+    <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\main.adb</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 9" line=" 5">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_project>
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\main.adb</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 9" line=" 5">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_project>
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\main.adb</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 9" line=" 5">
+      <vfs_project  />
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_project>
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\main.adb</vfs_file>
+    </file_marker>
+    <file_marker column=" 1" line=" 1">
+      <vfs_project >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_project>
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\player.adb</vfs_file>
+    </file_marker>
+    <file_marker current="true" column=" 6" line=" 9">
+      <vfs_project >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\blackvideo_player.gpr</vfs_project>
+      <vfs_file >C:\Users\Vilma E. Agripo\Documents\JednazLonestamp\Projects\Computer.Programs\BlackBlazent\Projects\BlackVideo\BlackVideo-Utilities\blackvideo-mini-player\src\player.adb</vfs_file>
     </file_marker>
   </Project>
 </Locations>

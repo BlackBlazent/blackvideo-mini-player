@@ -1,6 +1,6 @@
--- bindings/ffmpeg/ffmpeg-avcodec.ads
--- Ada bindings for libavcodec (FFmpeg)
--- Covers: codec, context, packet, decode
+-- ffmpeg-avcodec.ads
+-- Ada bindings for libavcodec
+-- File name: ffmpeg-avcodec.ads → package FFmpeg.AVCodec
 
 with Interfaces.C;
 with System;
@@ -14,19 +14,19 @@ package FFmpeg.AVCodec is
    -- ─────────────────────────────────────────────
    --  Error codes
    -- ─────────────────────────────────────────────
-   AVERROR_EAGAIN : constant int := -11;  -- EAGAIN / AVERROR(EAGAIN)
-   AVERROR_EOF    : constant int := -541478725;
+   AVERROR_EAGAIN : constant int := -11;
+   AVERROR_EOF    : constant int := -541_478_725;
 
    -- ─────────────────────────────────────────────
-   --  AVCodecID (subset of common IDs)
+   --  AVCodecID
    -- ─────────────────────────────────────────────
    type AVCodecID is new unsigned;
 
    -- ─────────────────────────────────────────────
    --  AVPacket
    -- ─────────────────────────────────────────────
-   AV_PKT_FLAG_KEY : constant int := 1;
-
+   --  We only need a few fields; the rest is opaque.
+   --  Use av_packet_alloc/free rather than stack allocation.
    type AVPacket is record
       Buf          : System.Address;
       PTS          : int64_t;
@@ -37,49 +37,44 @@ package FFmpeg.AVCodec is
       Flags        : int;
       Duration     : int64_t;
       Pos          : int64_t;
-      --  ... additional fields
+      --  opaque tail
    end record with Convention => C;
+
    type AVPacket_Ptr is access AVPacket;
 
    -- ─────────────────────────────────────────────
    --  AVCodecParameters
    -- ─────────────────────────────────────────────
    type AVCodecParameters is record
-      Codec_Type    : int;    -- AVMediaType
-      Codec_Id      : AVCodecID;
-      Codec_Tag     : unsigned;
-      Extra_Data    : System.Address;
-      Extra_Size    : int;
-      Bit_Rate      : int64_t;
-      Width         : int;
-      Height        : int;
-      Sample_Rate   : int;
-      Channels      : int;
-      Channel_Layout : unsigned_long;
-      --  ... more fields
+      Codec_Type     : int;       -- AVMediaType
+      Codec_Id       : AVCodecID;
+      Codec_Tag      : unsigned;
+      Extra_Data     : System.Address;
+      Extra_Size     : int;
+      Bit_Rate       : int64_t;
+      Width          : int;
+      Height         : int;
+      Sample_Rate    : int;
+      Channels       : int;
+      Channel_Layout : uint64_t;
+      Sample_Fmt     : int;
+      --  opaque tail
    end record with Convention => C;
+
    type AVCodecParameters_Ptr is access AVCodecParameters;
 
    -- ─────────────────────────────────────────────
-   --  AVCodec (opaque, we only need pointer)
+   --  AVCodec (opaque — only accessed via pointer)
    -- ─────────────────────────────────────────────
    type AVCodec is limited private;
    type AVCodec_Ptr is access AVCodec;
 
    -- ─────────────────────────────────────────────
-   --  Frame data arrays (for pixel/audio planes)
-   -- ─────────────────────────────────────────────
-   MAX_PLANES : constant := 8;
-
-   type Data_Array     is array (0 .. MAX_PLANES - 1) of System.Address;
-   type Linesize_Array is array (0 .. MAX_PLANES - 1) of int;
-
-   -- ─────────────────────────────────────────────
-   --  AVCodecContext (simplified)
+   --  AVCodecContext (partial)
    -- ─────────────────────────────────────────────
    type AVCodecContext is record
       Av_Class     : System.Address;
-      Log_Level    : int;
+      Log_Level_Offset : int;
       Codec_Type   : int;
       Codec        : AVCodec_Ptr;
       Codec_Id     : AVCodecID;
@@ -88,21 +83,35 @@ package FFmpeg.AVCodec is
       Internal     : System.Address;
       Opaque       : System.Address;
       Bit_Rate     : int64_t;
+      Bit_Rate_Tolerance : int;
+      Global_Quality : int;
+      Compression_Level : int;
       Flags        : int;
       Flags2       : int;
+      --  Video
       Width        : int;
       Height       : int;
-      Pix_Fmt      : int;    -- AVPixelFormat
+      Coded_Width  : int;
+      Coded_Height : int;
+      Gop_Size     : int;
+      Pix_Fmt      : int;
+      --  Threads
       Thread_Count : int;
+      Thread_Type  : int;
+      Active_Thread_Type : int;
+      Thread_Opaque : System.Address;
+      --  Audio
       Sample_Rate  : int;
       Channels     : int;
       Sample_Fmt   : int;
-      --  ... many more; opaque rest via System.Address padding
+      Frame_Size   : int;
+      --  opaque tail — do not add more fields
    end record with Convention => C;
+
    type AVCodecContext_Ptr is access AVCodecContext;
 
    -- ─────────────────────────────────────────────
-   --  API Functions
+   --  API
    -- ─────────────────────────────────────────────
 
    function avcodec_find_decoder (ID : AVCodecID) return AVCodec_Ptr
@@ -113,21 +122,21 @@ package FFmpeg.AVCodec is
    with Import, Convention => C, External_Name => "avcodec_alloc_context3";
 
    function avcodec_parameters_to_context
-     (Codec_Ctx : AVCodecContext_Ptr;
-      Par       : AVCodecParameters_Ptr) return int
+     (Ctx : AVCodecContext_Ptr;
+      Par : AVCodecParameters_Ptr) return int
    with Import, Convention => C,
         External_Name => "avcodec_parameters_to_context";
 
    function avcodec_open2
-     (AVCtx   : AVCodecContext_Ptr;
+     (Ctx     : AVCodecContext_Ptr;
       Codec   : AVCodec_Ptr;
-      Options : System.Address) return int
+      Options : System.Address) return int     -- null options
    with Import, Convention => C, External_Name => "avcodec_open2";
 
-   procedure avcodec_free_context (AVCtx : in out AVCodecContext_Ptr)
+   procedure avcodec_free_context (Ctx : in out AVCodecContext_Ptr)
    with Import, Convention => C, External_Name => "avcodec_free_context";
 
-   procedure avcodec_flush_buffers (AVCtx : AVCodecContext_Ptr)
+   procedure avcodec_flush_buffers (Ctx : AVCodecContext_Ptr)
    with Import, Convention => C, External_Name => "avcodec_flush_buffers";
 
    function av_packet_alloc return AVPacket_Ptr
@@ -140,12 +149,12 @@ package FFmpeg.AVCodec is
    with Import, Convention => C, External_Name => "av_packet_unref";
 
    function avcodec_send_packet
-     (AVCtx : AVCodecContext_Ptr;
-      Pkt   : AVPacket_Ptr) return int
+     (Ctx : AVCodecContext_Ptr;
+      Pkt : AVPacket_Ptr) return int
    with Import, Convention => C, External_Name => "avcodec_send_packet";
 
    function avcodec_receive_frame
-     (AVCtx : AVCodecContext_Ptr;
+     (Ctx   : AVCodecContext_Ptr;
       Frame : FFmpeg.AVUtil.AVFrame_Ptr) return int
    with Import, Convention => C, External_Name => "avcodec_receive_frame";
 

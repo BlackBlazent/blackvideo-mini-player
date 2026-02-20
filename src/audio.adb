@@ -1,170 +1,171 @@
 -- audio.adb
--- BlackVideo Mini Player - SDL2 Audio Implementation
+-- BlackVideo Mini Player - SDL2 Audio
 --
--- Uses SDL2 audio callback model with FFmpeg audio decode.
--- Resamples any audio format → SDL-requested format using swresample.
+-- Ada rules applied:
+--   1. Fill_Audio needs "pragma Convention (C, Fill_Audio)" so Ada allows
+--      taking its 'Access for an Audio_Callback (Convention => C) type.
+--   2. Got.Freq is Interfaces.C.int — convert to Integer before Integer'Image.
+--   3. SDL_MIX_MAXVOLUME is Integer in the binding — Vol is also Integer, OK.
+--   4. Allow-change flags are unsigned in the binding — 'or' works fine.
 
 with Ada.Text_IO;
 with Interfaces.C;
+with Interfaces.C.Strings;
 with System;
-
 with SDL.Audio;
-with FFmpeg.AVFormat;
-with FFmpeg.AVCodec;
-with FFmpeg.AVUtil;
-with FFmpeg.SWResample;
 
 package body Audio is
 
    use Ada.Text_IO;
    use Interfaces.C;
+   use SDL.Audio;
 
    -- ─────────────────────────────────────────────
-   --  Internal State
+   --  State
    -- ─────────────────────────────────────────────
-   Audio_Codec_Ctx  : FFmpeg.AVCodec.AVCodecContext_Ptr := null;
-   Swr_Ctx          : FFmpeg.SWResample.SwrContext_Ptr  := null;
-   Audio_Device_ID  : SDL.Audio.Audio_Device_ID := 0;
+   Dev          : Audio_Device_ID := Invalid_Device;
+   Vol          : Integer         := 80;
+   Muted        : Boolean         := False;
+   Pre_Mute_Vol : Integer         := 80;
 
-   Current_Volume   : Integer := 80;
-   Muted            : Boolean := False;
-   Pre_Mute_Volume  : Integer := 80;
-   Running          : Boolean := False;
-
-   --  Ring buffer for decoded PCM samples
-   Ring_Cap    : constant := 65536;
-   Ring_Buf    : array (0 .. Ring_Cap - 1) of Interfaces.C.unsigned_char;
-   Ring_Read   : Integer := 0;
-   Ring_Write  : Integer := 0;
-   Ring_Avail  : Integer := 0;
+   --  Simple ring buffer (64 KiB)
+   Ring_Size  : constant := 65_536;
+   Ring       : array (0 .. Ring_Size - 1) of unsigned_char;
+   Ring_Read  : Integer := 0;
+   Ring_Write : Integer := 0;
+   Ring_Avail : Integer := 0;
 
    -- ─────────────────────────────────────────────
-   --  SDL audio callback (called from SDL audio thread)
+   --  Fill_Audio — SDL2 audio callback
+   --
+   --  MUST have Convention => C so that Fill_Audio'Access is compatible
+   --  with Audio_Callback (which is also Convention => C).
    -- ─────────────────────────────────────────────
-   procedure Audio_Callback
+   procedure Fill_Audio
      (User_Data : System.Address;
       Stream    : System.Address;
-      Len       : Interfaces.C.int)
+      Len       : int);
+   pragma Convention (C, Fill_Audio);  -- ← required for 'Access to work
+
+   procedure Fill_Audio
+     (User_Data : System.Address;
+      Stream    : System.Address;
+      Len       : int)
    is
-      N       : Integer := Integer (Len);
-      Written : Integer := 0;
-      Dst     : array (0 .. N - 1) of Interfaces.C.unsigned_char
-              with Import, Address => Stream;
+      pragma Unreferenced (User_Data);
+      N   : constant Integer := Integer (Len);
+      Dst : array (0 .. N - 1) of unsigned_char
+          with Import, Address => Stream;
    begin
-      --  Fill silence first
+      --  Clear to silence first
       for I in 0 .. N - 1 loop
          Dst (I) := 0;
       end loop;
 
-      --  Copy from ring buffer
-      if Ring_Avail > 0 and not Muted then
-         Written := Integer'Min (N, Ring_Avail);
-         for I in 0 .. Written - 1 loop
-            Dst (I) := Ring_Buf (Ring_Read);
-            Ring_Read  := (Ring_Read + 1) mod Ring_Cap;
-            Ring_Avail := Ring_Avail - 1;
-         end loop;
-
-         --  Apply volume via SDL MixAudio
-         SDL.Audio.Mix_Audio_Stream (Stream, Stream, Len, Current_Volume);
+      if Ring_Avail > 0 and then not Muted then
+         declare
+            To_Copy : constant Integer := Integer'Min (N, Ring_Avail);
+         begin
+            for I in 0 .. To_Copy - 1 loop
+               Dst (I)    := Ring (Ring_Read);
+               Ring_Read  := (Ring_Read + 1) mod Ring_Size;
+               Ring_Avail := Ring_Avail - 1;
+            end loop;
+            --  Apply software volume
+            SDL_MixAudioFormat
+              (Stream, Stream,
+               AUDIO_S16SYS,
+               unsigned (To_Copy),
+               Vol);     -- Vol is Integer, SDL_MixAudioFormat takes int — OK
+         end;
       end if;
-   end Audio_Callback;
+   end Fill_Audio;
 
    -- ─────────────────────────────────────────────
    --  Init
    -- ─────────────────────────────────────────────
    procedure Init (Volume : Integer) is
-      Want : SDL.Audio.Audio_Spec;
-      Got  : SDL.Audio.Audio_Spec;
+      Want : SDL_AudioSpec;
+      Got  : SDL_AudioSpec;
    begin
-      Current_Volume := Volume;
+      Vol := Volume;
 
-      Want.Freq     := 44100;
-      Want.Format   := SDL.Audio.AUDIO_S16SYS;
-      Want.Channels := 2;
-      Want.Samples  := 4096;
-      Want.Callback := Audio_Callback'Access;
+      Want.Freq      := 44_100;
+      Want.Format    := AUDIO_S16SYS;
+      Want.Channels  := 2;
+      Want.Samples   := 4_096;
+      Want.Callback  := Fill_Audio'Access;   -- works because Convention => C
       Want.User_Data := System.Null_Address;
 
-      Audio_Device_ID := SDL.Audio.SDL_OpenAudioDevice
-        (null, 0, Want, Got,
-         SDL.Audio.SDL_AUDIO_ALLOW_FREQUENCY_CHANGE
-         or SDL.Audio.SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
+      Dev := SDL_OpenAudioDevice
+        (Device          => Interfaces.C.Strings.Null_Ptr,
+         Is_Capture      => 0,
+         Desired         => Want,
+         Obtained        => Got,
+         Allowed_Changes => SDL_AUDIO_ALLOW_FREQUENCY_CHANGE
+                            or SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
+         --  'or' works because both flags are 'unsigned' (modular type)
 
-      if Audio_Device_ID = 0 then
-         Put_Line ("[Audio] WARNING: Could not open audio device. Continuing without audio.");
+      if Dev = Invalid_Device then
+         Put_Line ("[Audio] WARNING: No audio device. Silent mode.");
       else
-         Put_Line ("[Audio] Audio device opened. Freq:" & Integer (Got.Freq)'Image);
+         --  Got.Freq is Interfaces.C.int — must convert to Integer first
+         Put_Line ("[Audio] Device opened. Freq="
+                   & Integer'Image (Integer (Got.Freq)));
       end if;
    end Init;
 
-   -- ─────────────────────────────────────────────
-   --  Start
-   -- ─────────────────────────────────────────────
    procedure Start is
    begin
-      if Audio_Device_ID /= 0 then
-         SDL.Audio.SDL_PauseAudioDevice (Audio_Device_ID, 0);  -- 0 = play
-         Running := True;
-         Put_Line ("[Audio] Playback started.");
+      if Dev /= Invalid_Device then
+         SDL_PauseAudioDevice (Dev, 0);
+         Put_Line ("[Audio] Started.");
       end if;
    end Start;
 
-   -- ─────────────────────────────────────────────
-   --  Pause / Resume
-   -- ─────────────────────────────────────────────
    procedure Pause is
    begin
-      if Audio_Device_ID /= 0 then
-         SDL.Audio.SDL_PauseAudioDevice (Audio_Device_ID, 1);
+      if Dev /= Invalid_Device then
+         SDL_PauseAudioDevice (Dev, 1);
       end if;
    end Pause;
 
    procedure Resume is
    begin
-      if Audio_Device_ID /= 0 then
-         SDL.Audio.SDL_PauseAudioDevice (Audio_Device_ID, 0);
+      if Dev /= Invalid_Device then
+         SDL_PauseAudioDevice (Dev, 0);
       end if;
    end Resume;
 
-   -- ─────────────────────────────────────────────
-   --  Stop
-   -- ─────────────────────────────────────────────
    procedure Stop is
    begin
-      Running := False;
-      if Audio_Device_ID /= 0 then
-         SDL.Audio.SDL_PauseAudioDevice (Audio_Device_ID, 1);
-         SDL.Audio.SDL_CloseAudioDevice (Audio_Device_ID);
-         Audio_Device_ID := 0;
+      if Dev /= Invalid_Device then
+         SDL_PauseAudioDevice (Dev, 1);
+         SDL_CloseAudioDevice (Dev);
+         Dev := Invalid_Device;
+         Put_Line ("[Audio] Stopped.");
       end if;
-      Put_Line ("[Audio] Stopped.");
    end Stop;
 
-   -- ─────────────────────────────────────────────
-   --  Set_Volume
-   -- ─────────────────────────────────────────────
    procedure Set_Volume (Volume : Integer) is
    begin
-      Current_Volume := Integer'Min (Integer'Max (Volume, 0), 128);
+      --  SDL_MIX_MAXVOLUME is Integer (128) — both sides are Integer, OK
+      Vol := Integer'Min (Integer'Max (Volume, 0), SDL_MIX_MAXVOLUME);
       if not Muted then
-         Pre_Mute_Volume := Current_Volume;
+         Pre_Mute_Vol := Vol;
       end if;
    end Set_Volume;
 
-   -- ─────────────────────────────────────────────
-   --  Toggle_Mute
-   -- ─────────────────────────────────────────────
    procedure Toggle_Mute is
    begin
       if Muted then
-         Muted          := False;
-         Current_Volume := Pre_Mute_Volume;
-         Put_Line ("[Audio] Unmuted. Volume:" & Current_Volume'Image);
+         Muted := False;
+         Vol   := Pre_Mute_Vol;
+         Put_Line ("[Audio] Unmuted. Vol=" & Integer'Image (Vol));
       else
-         Pre_Mute_Volume := Current_Volume;
-         Muted           := True;
-         Current_Volume  := 0;
+         Pre_Mute_Vol := Vol;
+         Vol          := 0;
+         Muted        := True;
          Put_Line ("[Audio] Muted.");
       end if;
    end Toggle_Mute;

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BlackVideo Player
+GenericName=Video Player
+Comment=BlackVideo Mini Player (Ada + SDL2 + FFmpeg)
+Exec=/usr/local/bin/blackvideo-player %F
+Icon=video-x-generic
+Terminal=false
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-matroska;video/x-msvideo;video/quicktime;video/webm;video/x-flv;video/x-ms-wmv;video/mpeg;video/ogg;application/ogg;
+Keywords=video;player;media;
+StartupNotify=false

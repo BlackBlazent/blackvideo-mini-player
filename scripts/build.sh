@@ -1,73 +1,59 @@
 #!/usr/bin/env bash
-# build.sh - Build BlackVideo Mini Player for Linux and macOS
-# Requirements: GNAT, SDL2, FFmpeg development libraries
-
+# build.sh — BlackVideo Mini Player: Linux / macOS
 set -e
 
-echo "╔══════════════════════════════════════════╗"
-echo "║  BlackVideo Mini Player - Build Script   ║"
-echo "╚══════════════════════════════════════════╝"
+echo "========================================"
+echo " BlackVideo Mini Player — Build Script  "
+echo "========================================"
 
-# ── Detect OS ───────────────────────────────────
 OS=$(uname -s)
-echo "Detected OS: $OS"
+echo "OS: $OS"
 
-# ── Check dependencies ───────────────────────────
-check_dep() {
-    if ! command -v "$1" &> /dev/null; then
-        echo "ERROR: $1 not found. Please install it."
+# ── Dependency checks ──────────────────────────────────────────────────────
+check() {
+    if ! command -v "$1" &>/dev/null; then
+        echo "ERROR: '$1' not found."
+        echo "  $2"
         exit 1
     fi
 }
 
-check_dep gprbuild
-check_dep pkg-config
+check gprbuild "Install via: alr toolchain --select  (https://alire.ada.dev/)"
+check pkg-config "Install: apt install pkg-config  OR  brew install pkg-config"
 
-# ── Check SDL2 ───────────────────────────────────
-if ! pkg-config --exists sdl2; then
-    echo "ERROR: SDL2 development libraries not found."
-    if [[ "$OS" == "Linux" ]]; then
-        echo "Install with: sudo apt install libsdl2-dev"
-    elif [[ "$OS" == "Darwin" ]]; then
-        echo "Install with: brew install sdl2"
-    fi
+pkg-config --exists sdl2 2>/dev/null || {
+    echo "ERROR: SDL2 dev libraries not found."
+    [[ "$OS" == "Linux" ]] && echo "  sudo apt install libsdl2-dev"
+    [[ "$OS" == "Darwin" ]] && echo "  brew install sdl2"
     exit 1
-fi
+}
 
-# ── Check FFmpeg ─────────────────────────────────
-if ! pkg-config --exists libavcodec libavformat libavutil libswscale libswresample; then
-    echo "ERROR: FFmpeg development libraries not found."
-    if [[ "$OS" == "Linux" ]]; then
-        echo "Install with: sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev"
-    elif [[ "$OS" == "Darwin" ]]; then
-        echo "Install with: brew install ffmpeg"
-    fi
+pkg-config --exists libavcodec libavformat libavutil libswscale libswresample 2>/dev/null || {
+    echo "ERROR: FFmpeg dev libraries not found."
+    [[ "$OS" == "Linux" ]] && echo "  sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev"
+    [[ "$OS" == "Darwin" ]] && echo "  brew install ffmpeg"
     exit 1
-fi
+}
 
-echo "✓ SDL2 found:   $(pkg-config --modversion sdl2)"
-echo "✓ FFmpeg found: $(pkg-config --modversion libavcodec)"
+echo "SDL2:   $(pkg-config --modversion sdl2)"
+echo "FFmpeg: $(pkg-config --modversion libavcodec)"
+echo ""
 
-# ── Create build directories ─────────────────────
+# ── Build directories ──────────────────────────────────────────────────────
 mkdir -p build/obj
 
-# ── Build ────────────────────────────────────────
-echo ""
+# ── Detect OS target ──────────────────────────────────────────────────────
+if [[ "$OS" == "Darwin" ]]; then OS_TARGET="macos"
+else OS_TARGET="linux"; fi
+
+# ── Build ─────────────────────────────────────────────────────────────────
 echo "Building ..."
-
-if [[ "$OS" == "Darwin" ]]; then
-    OS_TARGET="macos"
-else
-    OS_TARGET="linux"
-fi
-
 gprbuild -P blackvideo_player.gpr \
     -XOS_TARGET="$OS_TARGET" \
-    -j0 \
-    --RTS=native
+    -j0
 
 echo ""
 echo "✓ Build complete: build/blackvideo-player"
 echo ""
-echo "Run with:"
-echo "  ./build/blackvideo-player <your-video.mp4>"
+echo "Usage:"
+echo "  ./build/blackvideo-player /path/to/video.mp4"
