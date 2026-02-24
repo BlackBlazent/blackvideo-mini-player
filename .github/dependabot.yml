@@ -1,16 +1,52 @@
 # Dependabot configuration for BlackVideo Mini Player
-# This file configures automated dependency updates and security scanning
+# Enables automatic pull requests for dependency updates
 
 version: 2
 updates:
 
-  # GitHub Actions workflows
-  - package-ecosystem: "github-actions"
+  # ==============================
+  # Rust (Tauri backend)
+  # ==============================
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "cargo"
+      include: "scope"
+    labels:
+      - "rust"
+      - "dependencies"
+
+  # ==============================
+  # Node.js (Frontend - Tauri UI)
+  # ==============================
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "tuesday"
       time: "10:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "npm"
+      include: "scope"
+    labels:
+      - "frontend"
+      - "dependencies"
+
+  # ==============================
+  # GitHub Actions
+  # ==============================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "11:00"
     open-pull-requests-limit: 3
     commit-message:
       prefix: "ci"
@@ -19,28 +55,32 @@ updates:
       - "ci"
       - "github-actions"
 
-  # Git submodules (if any for external libraries)
+  # ==============================
+  # Git Submodules (Ada libraries if used)
+  # ==============================
   - package-ecosystem: "gitsubmodule"
     directory: "/"
     schedule:
       interval: "monthly"
-      day: "monday"
+      day: "thursday"
       time: "08:00"
     open-pull-requests-limit: 2
     commit-message:
       prefix: "submodule"
       include: "scope"
     labels:
-      - "submodules"
+      - "ada"
       - "dependencies"
 
-  # Docker dependencies (if you add Dockerfile in future)
+  # ==============================
+  # Docker (Optional)
+  # ==============================
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "wednesday"
-      time: "11:00"
+      day: "friday"
+      time: "12:00"
     open-pull-requests-limit: 2
     commit-message:
       prefix: "docker"
@@ -48,14 +88,3 @@ updates:
     labels:
       - "docker"
       - "dependencies"
-
-# Configure Dependabot to auto-merge minor/patch updates
-# Uncomment the following section if you want auto-merge enabled
-# auto-merge:
-#   - dependency-type: "production"
-#     update-type: "semver:patch"
-#   - dependency-type: "production"
-#     update-type: "semver:minor"
-
-# Note: Security alerts are enabled by default in repository settings
-# Configure them in GitHub repository settings under Security & Analysis
