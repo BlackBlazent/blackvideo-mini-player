@@ -76,7 +76,7 @@ package body Audio is
               (Stream, Stream,
                AUDIO_S16SYS,
                unsigned (To_Copy),
-               Vol);     -- Vol is Integer, SDL_MixAudioFormat takes int — OK
+               int (Vol));     -- Vol is Integer, SDL_MixAudioFormat takes int — OK
          end;
       end if;
    end Fill_Audio;
