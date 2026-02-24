@@ -1,6 +1,4 @@
 ![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%3AVisitor&labelColor=%23000000&countColor=%2337d67a&style=flat&labelStyle=lower)
-  <img src="https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%20Visitors&labelColor=%23000000&countColor=%2337d67a&style=flat" />
-</p>
 
 # BlackVideo Mini Player
 
