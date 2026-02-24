@@ -1,7 +1,11 @@
-# BlackVideo Mini Player
-<p align="center">
+![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%3AVisitor&labelColor=%23000000&countColor=%2337d67a&style=flat&labelStyle=lower)
   <img src="https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%20Visitors&labelColor=%23000000&countColor=%2337d67a&style=flat" />
 </p>
+
+# BlackVideo Mini Player
+
+Lightweight cross-platform video player (Ada + SDL2 + FFmpeg).  
+Support player for the [BlackVideo](https://github.com/BlackBlazent/BlackVideo). Works standalone via **CLI** or **right-click** on any video file.
 
 <p align="center">
 
@@ -28,9 +32,6 @@
   </p>
 
 </p>
-
-Lightweight cross-platform video player (Ada + SDL2 + FFmpeg).  
-Support player for the [BlackVideo](https://github.com/BlackBlazent/BlackVideo). Works standalone via **CLI** or **right-click** on any video file.
 
 ---
 
