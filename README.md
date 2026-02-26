@@ -1,35 +1,7 @@
-![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%3AVisitor&labelColor=%23000000&countColor=%2337d67a&style=flat&labelStyle=lower)
-
 # BlackVideo Mini Player
 
 Lightweight cross-platform video player (Ada + SDL2 + FFmpeg).  
-Support player for the [BlackVideo](https://github.com/BlackBlazent/BlackVideo). Works standalone via **CLI** or **right-click** on any video file.
-
-<p align="center">
-
-  <!-- Core Badges -->
-  <p align="center">
-    <img src="https://img.shields.io/badge/version-1.1.0-37d67a?style=for-the-badge" />
-    <img src="https://img.shields.io/badge/status-in%20active%20development-orange?style=for-the-badge" />
-    <img src="https://img.shields.io/badge/license-MIT-black?style=for-the-badge" />
-  </p>
-
-  <!-- Tech Stack -->
-  <p align="center">
-    <img src="https://img.shields.io/badge/Ada-Language-0A84FF?style=for-the-badge&logo=ada&logoColor=white" />
-    <img src="https://img.shields.io/badge/SDL2-Rendering-7B42BC?style=for-the-badge" />
-    <img src="https://img.shields.io/badge/FFmpeg-Decoding-D90429?style=for-the-badge" />
-    <img src="https://img.shields.io/badge/Alire-Package-009688?style=for-the-badge" />
-    <img src="https://img.shields.io/badge/GNAT-Compiler-FFB703?style=for-the-badge" />
-    <img src="https://img.shields.io/badge/gprbuild-Build%20System-6c757d?style=for-the-badge" />
-  </p>
-
-  <!-- Ecosystem -->
-  <p align="center">
-    <img src="https://img.shields.io/badge/BlackVideo-Utilities-000000?style=for-the-badge" />
-  </p>
-
-</p>
+Support player for the BlackVideo Tauri v2 app. Works standalone via **CLI** or **right-click** on any video file.
 
 ---
 
@@ -74,6 +46,7 @@ blackvideo-mini-player/
 │       └── install_macos.sh            ← macOS: creates Quick Action service
 │
 ├── lib/              ← Put Windows DLLs / import libs here
+|   └──include/       ← Put FFmpeg headers here
 ├── build/            ← Compiled output goes here
 ├── scripts/
 │   ├── build.bat     ← Windows build (auto-finds gprbuild)
