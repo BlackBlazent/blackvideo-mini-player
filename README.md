@@ -1,7 +1,10 @@
+![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%3AVisitor&labelColor=%23000000&countColor=%2337d67a&style=flat&labelStyle=lower)
+
 # BlackVideo Mini Player
 
-Lightweight cross-platform video player (Ada + SDL2 + FFmpeg).  
-Support player for the BlackVideo Tauri v2 app. Works standalone via **CLI** or **right-click** on any video file.
+Lightweight cross-platform video player (Ada + SDL2 + FFmpeg). Support player for the [BlackVideo](https://github.com/BlackBlazent/BlackVideo). Works standalone via **CLI** or **right-click** on any video file.
+
+<p align="center"> <!-- Core Badges --> <p align="center"> <img src="https://img.shields.io/badge/version-1.1.0-37d67a?style=for-the-badge" /> <img src="https://img.shields.io/badge/status-in%20active%20development-orange?style=for-the-badge" /> <img src="https://img.shields.io/badge/license-MIT-black?style=for-the-badge" /> </p> <!-- Tech Stack --> <p align="center"> <img src="https://img.shields.io/badge/Ada-Language-0A84FF?style=for-the-badge&logo=ada&logoColor=white" /> <img src="https://img.shields.io/badge/SDL2-Rendering-7B42BC?style=for-the-badge" /> <img src="https://img.shields.io/badge/FFmpeg-Decoding-D90429?style=for-the-badge" /> <img src="https://img.shields.io/badge/Alire-Package-009688?style=for-the-badge" /> <img src="https://img.shields.io/badge/GNAT-Compiler-FFB703?style=for-the-badge" /> <img src="https://img.shields.io/badge/gprbuild-Build%20System-6c757d?style=for-the-badge" /> </p> <!-- Ecosystem --> <p align="center"> <img src="https://img.shields.io/badge/BlackVideo-Utilities-000000?style=for-the-badge" /> </p> </p>
 
 ---
 
@@ -226,3 +229,20 @@ GNAT maps Ada package `Foo.Bar.Baz` to file `foo-bar-baz.ads`. You cannot embed 
 
 **Letterbox rendering:**  
 `Renderer.Fit_Rect` computes `scale = min(win_w/vid_w, win_h/vid_h)` and centres the video with black bars, preserving the original aspect ratio on any window size or fullscreen resolution.
+
+## Contributing
+
+If you want to contribute to this project, please follow the following steps:
+
+1. Fork the repository
+2. Create a new branch
+3. Make your changes
+4. Commit your changes
+5. Push your changes to the remote repository
+6. Create a pull request
+
+Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details." what my RAODMap about in the v1.1.0 or v1.0 I want afeature which is whatstated in README.md. After you generate I'll add them to Project tab in roadtmap as item. v1.1.0 and v1.0 is the same the 1.0 is short only
