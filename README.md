@@ -245,4 +245,4 @@ Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to cont
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details." what my RAODMap about in the v1.1.0 or v1.0 I want afeature which is whatstated in README.md. After you generate I'll add them to Project tab in roadtmap as item. v1.1.0 and v1.0 is the same the 1.0 is short only
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
