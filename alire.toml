@@ -1,11 +1,13 @@
-[general]
 name = "blackvideo_player"
-description = "BlackVideo Mini Support Player - Cross-platform video player using Ada + SDL2 + FFmpeg"
-version = "1.0.0"
-authors = ["BlackVideo Team"]
+description = "A lightweight auxiliary CLI video player"
+version = "0.1.0-dev"
+authors = ["Jednaz Lonestamp"]
+maintainers = ["Jednaz Lonestamp <jednazlonestamp9@gmail.com>"]
+maintainers-logins = ["LoneStamp"]
 licenses = "MIT"
-maintainers = ["blackvideo@example.com"]
-maintainers-logins = []
+website = "https://blackvideo-centric-site.onrender.com/"
+tags = ["video", "multimedia", "cli", "ffmpeg", "sdl2", "cross-platform", "media-player", "ada", "systems", "video-player"]
+
 
 [build-switches]
 release.optimization = "performance"
