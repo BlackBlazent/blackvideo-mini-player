@@ -6,136 +6,140 @@ echo  BlackVideo Mini Player - Windows Build
 echo ==========================================
 echo.
 
-:: ── Navigate to project root (where blackvideo_player.gpr lives) ──────────
-:: Strategy: check current dir first, then try one level up (if run from scripts\)
+:: ── Navigate to project root ──────────────────────────────────────────────
 if exist "blackvideo_player.gpr" (
-    :: Already in project root — good, stay here
     echo [INFO] Working directory: %CD%
 ) else if exist "..\blackvideo_player.gpr" (
-    :: Running from scripts\ subfolder — go up one level
     cd /d "%~dp0.."
     echo [INFO] Working directory: %CD%
 ) else (
     echo ERROR: Cannot find blackvideo_player.gpr
-    echo        Run this script from the project root or from scripts\
-    echo        Expected location: blackvideo-mini-player\blackvideo_player.gpr
-    pause
-    exit /b 1
+    pause & exit /b 1
 )
 echo.
 
-:: ── WARN about leftover old files that break the build ────────────────────
-if exist "bindings\sdl2\sdl-video.adb" (
-    echo WARNING: Found old file bindings\sdl2\sdl-video.adb
-    echo          This file must be DELETED - it conflicts with the new bindings.
-    echo          Deleting it now...
-    del /q "bindings\sdl2\sdl-video.adb"
-    echo          Deleted.
-    echo.
-)
+:: ── Delete ALL stale .adb files that conflict with current architecture ───
+set "STALE=0"
+if exist "bindings\ffmpeg\ffmpeg-avcodec.adb"  ( del /q "bindings\ffmpeg\ffmpeg-avcodec.adb"  & echo [FIX] Deleted stale bindings\ffmpeg\ffmpeg-avcodec.adb  & set "STALE=1" )
+if exist "bindings\ffmpeg\ffmpeg-avformat.adb" ( del /q "bindings\ffmpeg\ffmpeg-avformat.adb" & echo [FIX] Deleted stale bindings\ffmpeg\ffmpeg-avformat.adb & set "STALE=1" )
+if exist "bindings\sdl2\sdl-video.adb"         ( del /q "bindings\sdl2\sdl-video.adb"         & echo [FIX] Deleted stale bindings\sdl2\sdl-video.adb          & set "STALE=1" )
+if "%STALE%"=="1" echo.
 
-:: ── Find gprbuild ─────────────────────────────────────────────────────────
+:: ── Find GNAT tools ───────────────────────────────────────────────────────
 set "GPRBUILD="
-
-:: 1) Already on PATH?
 for %%x in (gprbuild.exe) do set "GPRBUILD=%%~$PATH:x"
 if defined GPRBUILD goto :found_gprbuild
-
-:: 2) GNAT 2021 (detected in your system)
-if exist "C:\gnat\2021\bin\gprbuild.exe" (
-    set "GPRBUILD=C:\gnat\2021\bin\gprbuild.exe"
-    goto :found_gprbuild
+if exist "C:\gnat\2021\bin\gprbuild.exe" set "GPRBUILD=C:\gnat\2021\bin\gprbuild.exe" & goto :found_gprbuild
+for %%D in ("C:\gnat\2022\bin" "C:\gnat\2023\bin" "C:\GNAT\bin") do (
+    if exist "%%~D\gprbuild.exe" set "GPRBUILD=%%~D\gprbuild.exe" & goto :found_gprbuild
 )
-:: 3) Other common installs
-for %%D in ("C:\gnat\2022\bin" "C:\gnat\2023\bin" "C:\GNAT\bin" "C:\Program Files\Alire\bin" "C:\Alire\bin") do (
-    if exist "%%~D\gprbuild.exe" (
-        set "GPRBUILD=%%~D\gprbuild.exe"
-        goto :found_gprbuild
-    )
-)
-:: 4) Deep search in Alire toolchains
-if exist "%LOCALAPPDATA%\alire" (
-    for /r "%LOCALAPPDATA%\alire" %%f in (gprbuild.exe) do (
-        if exist "%%f" ( set "GPRBUILD=%%f" & goto :found_gprbuild )
-    )
-)
-
 :found_gprbuild
 if not defined GPRBUILD (
-    echo ERROR: gprbuild.exe not found.
-    echo.
-    echo You have GNAT 2021 at C:\gnat\2021 - add it to PATH:
-    echo   System Properties -^> Environment Variables -^> System Path -^> New
-    echo   Add: C:\gnat\2021\bin
-    echo Then close and reopen this command prompt.
-    pause
-    exit /b 1
+    echo ERROR: gprbuild.exe not found. Add C:\gnat\2021\bin to PATH.
+    pause & exit /b 1
+)
+
+:: GCC is in the same bin dir as gprbuild
+for %%F in ("%GPRBUILD%") do set "GNAT_BIN=%%~dpF"
+set "GCC=%GNAT_BIN%gcc.exe"
+if not exist "%GCC%" (
+    echo ERROR: gcc.exe not found at %GCC%
+    pause & exit /b 1
 )
 echo [OK] gprbuild: %GPRBUILD%
+echo [OK] gcc:      %GCC%
 echo.
 
-:: ── Check lib\ import libraries ───────────────────────────────────────────
-echo Checking lib\ for required import libs...
-set "WARN=0"
-if not exist "lib\libSDL2.a" (
-    echo   MISSING: lib\libSDL2.a
-    echo     ^> Copy from SDL2-devel-2.0.5-mingw\x86_64-w64-mingw32\lib\libSDL2.a
-    set "WARN=1"
-)
-for %%L in (libavcodec.dll.a libavformat.dll.a libavutil.dll.a libswscale.dll.a libswresample.dll.a) do (
-    if not exist "lib\%%L" (
-        echo   MISSING: lib\%%L
-        echo     ^> Copy from ffmpeg-8.0.1-full_build-shared\lib\%%L
-        set "WARN=1"
+:: ── Check FFmpeg headers (required by src\ffmpeg_helpers.c) ──────────────
+echo Checking FFmpeg headers in lib\include\ ...
+set "HDR_OK=1"
+for %%H in (libavformat\avformat.h libavcodec\avcodec.h libavutil\avutil.h) do (
+    if not exist "lib\include\%%H" (
+        echo   MISSING: lib\include\%%H
+        set "HDR_OK=0"
     )
 )
-if "%WARN%"=="1" (
+if "%HDR_OK%"=="0" (
     echo.
-    echo   ^^^ These are needed for LINKING. Compilation will run but linking will fail.
+    echo   Copy the FFmpeg headers into lib\include\:
+    echo     ffmpeg-8.0.1-full_build-shared\include\  -->  lib\include\
     echo.
-) else (
-    echo   [OK] All import libs present.
-    echo.
+    pause & exit /b 1
 )
+echo   [OK] FFmpeg headers present.
+echo.
+
+:: ── Check import libraries ────────────────────────────────────────────────
+echo Checking lib\ import libraries...
+set "MISSING=0"
+if not exist "lib\libSDL2.a"     ( echo   MISSING: lib\libSDL2.a     & set "MISSING=1" )
+if not exist "lib\libSDL2main.a" ( echo   MISSING: lib\libSDL2main.a & set "MISSING=1" )
+for %%N in (avcodec avformat avutil swscale swresample) do (
+    if not exist "lib\lib%%N.a" (
+        if exist "lib\lib%%N.dll.a" (
+            copy /y "lib\lib%%N.dll.a" "lib\lib%%N.a" >nul
+            echo   [FIX] lib\lib%%N.dll.a copied to lib\lib%%N.a
+        ) else (
+            echo   MISSING: lib\lib%%N.a
+            set "MISSING=1"
+        )
+    )
+)
+if "%MISSING%"=="1" (
+    echo.
+    echo ERROR: Copy missing .a files into lib\ then retry.
+    pause & exit /b 1
+)
+echo   [OK] All import libs ready.
+echo.
 
 :: ── Create build dirs ─────────────────────────────────────────────────────
 if not exist "build\obj" mkdir "build\obj"
 
-:: ── Build ─────────────────────────────────────────────────────────────────
-echo Building...
+:: ── STEP 1: Compile ffmpeg_helpers.c with gcc directly ───────────────────
+:: This bypasses GPRbuild's mixed-language archive entirely.
+:: The .o file is passed directly to the linker via blackvideo_player.gpr.
+echo Compiling C helper (ffmpeg_helpers.c)...
+"%GCC%" -O2 -c "src\ffmpeg_helpers.c" ^
+    -I"lib\include" ^
+    -o "build\obj\ffmpeg_helpers.o"
+
+if errorlevel 1 (
+    echo.
+    echo ==========================================
+    echo  C COMPILE FAILED - see errors above
+    echo ==========================================
+    pause & exit /b 1
+)
+echo   [OK] build\obj\ffmpeg_helpers.o
+echo.
+
+:: ── STEP 2: Build Ada sources and link everything ─────────────────────────
+:: Pure Ada project now — no mixed-language archive, no ranlib needed.
+:: ffmpeg_helpers.o is linked directly via GPR Linker switches.
+echo Building Ada sources and linking...
 echo.
 "%GPRBUILD%" -P blackvideo_player.gpr -XOS_TARGET=windows -j0
 
 if errorlevel 1 (
     echo.
     echo ==========================================
-    echo  BUILD FAILED
+    echo  BUILD FAILED - see errors above
     echo ==========================================
-    echo.
-    echo See errors above. Common fixes:
-    echo   1. lib\libSDL2.a missing        ^(copy from SDL2-devel MinGW package^)
-    echo   2. lib\libavcodec.dll.a missing  ^(copy from FFmpeg shared build^)
-    echo   3. Old sdl-video.adb still present ^(the script auto-deletes it^)
-    echo.
-    pause
-    exit /b 1
+    pause & exit /b 1
 )
 
 echo.
 echo ==========================================
-echo  BUILD SUCCESS
-echo  Output: build\blackvideo-player.exe
+echo  BUILD SUCCESS: build\blackvideo-player.exe
 echo ==========================================
 echo.
-echo Copy these DLLs into build\ before running:
-echo   SDL2.dll              from SDL2-devel-2.0.5-mingw\x86_64-w64-mingw32\bin\
-echo   avcodec-62.dll        from ffmpeg-8.0.1-full_build-shared\bin\
-echo   avformat-62.dll
-echo   avutil-60.dll
-echo   swresample-6.dll
-echo   swscale-9.dll
-echo   avdevice-62.dll
-echo   avfilter-11.dll
+
+:: ── Copy runtime DLLs to build\ ──────────────────────────────────────────
+echo Copying runtime DLLs to build\ ...
+for %%F in (SDL2.dll avcodec-62.dll avdevice-62.dll avfilter-11.dll avformat-62.dll avutil-60.dll swresample-6.dll swscale-9.dll) do (
+    if exist "lib\%%F" ( copy /y "lib\%%F" "build\%%F" >nul & echo   Copied %%F )
+)
 echo.
 echo Run:  build\blackvideo-player.exe "C:\path\to\video.mp4"
 echo.
