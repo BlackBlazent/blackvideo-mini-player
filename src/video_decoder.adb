@@ -1,8 +1,5 @@
 -- video_decoder.adb
--- BlackVideo Mini Player - FFmpeg decode + YUV->RGB conversion
---
--- Uses opaque FFmpeg struct handles + C helper functions (ffmpeg_helpers.c)
--- to avoid EXCEPTION_ACCESS_VIOLATION from wrong struct field offsets.
+-- BlackVideo Mini Player - FFmpeg video + audio decode pipeline
 
 with Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
@@ -13,33 +10,48 @@ with FFmpeg.AVUtil;
 with FFmpeg.AVCodec;
 with FFmpeg.AVFormat;
 with FFmpeg.SWScale;
+with FFmpeg.SWResample;
+with Audio;
 
 package body Video_Decoder is
 
    use Ada.Text_IO;
-   use Interfaces.C;
+   use System;
    use Interfaces.C.Strings;
    use FFmpeg.AVUtil;
    use FFmpeg.AVCodec;
    use FFmpeg.AVFormat;
    use FFmpeg.SWScale;
+   use FFmpeg.SWResample;
 
-   Fmt_Ctx   : AVFormatContext_Ptr := null;
-   Codec_Ctx : AVCodecContext_Ptr  := null;
-   Sws_Ctx   : SwsContext_Ptr      := null;
-   Pkt       : AVPacket_Ptr        := null;
-   Raw_Frame : AVFrame_Ptr         := null;
+   -- ── Video state ───────────────────────────────────────────────────────
+   Fmt_Ctx       : AVFormatContext_Ptr := Null_Format_Ctx;
+   Vid_Codec_Ctx : AVCodecContext_Ptr  := Null_Codec_Ctx;
+   Sws_Ctx       : SwsContext_Ptr      := null;
+   Pkt           : AVPacket_Ptr        := null;
+   Raw_Frame     : AVFrame_Ptr         := null;
 
    RGB_Buffer   : Byte_Array_Access := null;
    RGB_Data     : Plane_Data_Array;
    RGB_Linesize : Plane_Linesize_Array;
 
-   Vid_Stream : int := -1;
-   Aud_Stream : int := -1;
+   Vid_Stream : int     := -1;
+   V_Width    : Integer := 0;
+   V_Height   : Integer := 0;
+   V_FPS      : Float   := 25.0;
+   V_Pix_Fmt  : int     := 0;
 
-   V_Width  : Integer := 0;
-   V_Height : Integer := 0;
-   V_FPS    : Float   := 25.0;
+   -- ── Audio state ───────────────────────────────────────────────────────
+   Aud_Stream    : int                := -1;
+   Aud_Codec_Ctx : AVCodecContext_Ptr := Null_Codec_Ctx;
+   Swr_Ctx       : SwrContext_Ptr     := null;
+   Aud_Frame     : AVFrame_Ptr        := null;
+
+   -- PCM output buffer: 8192 stereo S16 samples = 32 KiB
+   Pcm_Max_Samples : constant := 8_192;
+   type PCM_Buffer is
+     array (0 .. Pcm_Max_Samples * 2 * 2 - 1) of Interfaces.C.unsigned_char;
+   Pcm_Buf : PCM_Buffer;
 
    Paused_Flag : Boolean := False;
    EOF_Flag    : Boolean := False;
@@ -47,6 +59,7 @@ package body Video_Decoder is
    procedure Free_Bytes is new Ada.Unchecked_Deallocation
      (Byte_Array, Byte_Array_Access);
 
+   -- ── Open ─────────────────────────────────────────────────────────────
    procedure Open
      (File_Path      : String;
       Width          : out Integer;
@@ -56,9 +69,10 @@ package body Video_Decoder is
       C_Path : chars_ptr := New_String (File_Path);
       Ret    : int;
    begin
-      av_log_set_level (AV_LOG_WARNING);
+      Width := 0; Height := 0; Frame_Delay_MS := 40;
 
-      -- Open container
+      bv_suppress_logs;
+
       Ret := avformat_open_input
                (Fmt_Ctx, C_Path, System.Null_Address, System.Null_Address);
       Free (C_Path);
@@ -68,103 +82,148 @@ package body Video_Decoder is
 
       Ret := avformat_find_stream_info (Fmt_Ctx, System.Null_Address);
       if Ret < 0 then
-         raise Program_Error with "[Decoder] avformat_find_stream_info failed";
+         raise Program_Error with "[Decoder] Cannot read stream info";
       end if;
 
-      -- Find best video stream (safe — no struct field access)
+      -- ── Find streams ──────────────────────────────────────────────────
       Vid_Stream := av_find_best_stream
         (Fmt_Ctx, AVMEDIA_TYPE_VIDEO, -1, -1, System.Null_Address, 0);
       if Vid_Stream < 0 then
          raise Program_Error with "[Decoder] No video stream in: " & File_Path;
       end if;
-      Put_Line ("[Decoder] Video stream #" & int'Image (Vid_Stream));
 
-      -- Find best audio stream (optional — don't fail if absent)
       Aud_Stream := av_find_best_stream
         (Fmt_Ctx, AVMEDIA_TYPE_AUDIO, -1, Vid_Stream, System.Null_Address, 0);
-      if Aud_Stream >= 0 then
-         Put_Line ("[Decoder] Audio stream #" & int'Image (Aud_Stream));
-      end if;
 
-      -- Get codec parameters via safe C helper (no struct dereference)
+      -- ── Open video codec ──────────────────────────────────────────────
       declare
-         S   : constant AVStream_Ptr := avformat_get_stream (Fmt_Ctx, Vid_Stream);
-         Par : constant AVCodecParameters_Ptr := avformat_stream_codecpar (S);
+         Par   : constant AVCodecParameters_Ptr :=
+                   Get_Stream_Codecpar (Fmt_Ctx, Vid_Stream);
          Codec : AVCodec_Ptr;
       begin
-         if Par = null then
-            raise Program_Error with "[Decoder] null codecpar";
+         if Par = Null_Codecpar then
+            raise Program_Error with "[Decoder] No video codec parameters";
          end if;
 
-         -- Find and open decoder
-         Codec := avcodec_find_decoder (Par.Codec_Id);
-         if Codec = null then
-            raise Program_Error with "[Decoder] No decoder found";
+         V_Width   := Integer (Get_Codecpar_Width   (Par));
+         V_Height  := Integer (Get_Codecpar_Height  (Par));
+         V_Pix_Fmt := Get_Codecpar_Pix_Fmt          (Par);
+
+         if V_Width <= 0 or else V_Height <= 0 then
+            raise Program_Error with "[Decoder] Invalid video dimensions";
          end if;
 
-         Codec_Ctx := avcodec_alloc_context3 (Codec);
-         if Codec_Ctx = null then
-            raise Program_Error with "[Decoder] avcodec_alloc_context3 failed";
+         Put_Line ("[Decoder] Video #" & int'Image (Vid_Stream)
+                   & "  " & Integer'Image (V_Width)
+                   & "x" & Integer'Image (V_Height)
+                   & "  pix_fmt=" & int'Image (V_Pix_Fmt));
+
+         Codec := avcodec_find_decoder (Get_Codecpar_Codec_Id (Par));
+         if Codec = Null_Codec then
+            raise Program_Error with "[Decoder] No video decoder found";
          end if;
 
-         Ret := avcodec_parameters_to_context (Codec_Ctx, Par);
+         Vid_Codec_Ctx := avcodec_alloc_context3 (Codec);
+         if Vid_Codec_Ctx = Null_Codec_Ctx then
+            raise Program_Error with "[Decoder] Cannot alloc video codec context";
+         end if;
+
+         Ret := avcodec_parameters_to_context (Vid_Codec_Ctx, Par);
          if Ret < 0 then
-            raise Program_Error with "[Decoder] avcodec_parameters_to_context failed";
+            raise Program_Error with "[Decoder] Cannot copy video codec params";
          end if;
 
-         -- Set thread count via safe C helper
-         avcodec_ctx_set_threads (Codec_Ctx, 4);
-
-         Ret := avcodec_open2 (Codec_Ctx, Codec, System.Null_Address);
+         Ret := avcodec_open2 (Vid_Codec_Ctx, Codec, System.Null_Address);
          if Ret < 0 then
-            raise Program_Error with "[Decoder] avcodec_open2 failed";
+            raise Program_Error with "[Decoder] Cannot open video codec";
          end if;
-
-         -- Read width/height from AVCodecParameters (stable struct, safe)
-         V_Width  := Integer (Par.Width);
-         V_Height := Integer (Par.Height);
       end;
 
-      -- Get FPS from stream via safe C helper
+      -- ── Open audio codec + resampler ──────────────────────────────────
+      if Aud_Stream >= 0 then
+         declare
+            Par       : constant AVCodecParameters_Ptr :=
+                          Get_Stream_Codecpar (Fmt_Ctx, Aud_Stream);
+            Codec     : AVCodec_Ptr;
+            In_Rate   : int;
+            In_Fmt    : int;
+            In_Layout : unsigned_long;
+         begin
+            if Par /= Null_Codecpar then
+               In_Rate   := Get_Codecpar_Sample_Rate    (Par);
+               In_Fmt    := Get_Codecpar_Sample_Fmt     (Par);
+               In_Layout := Get_Codecpar_Channel_Layout (Par);
+
+               if In_Layout = 0 then
+                  In_Layout := (if Get_Codecpar_Channels (Par) = 1
+                                then AV_CH_LAYOUT_MONO
+                                else AV_CH_LAYOUT_STEREO);
+               end if;
+
+               Codec := avcodec_find_decoder (Get_Codecpar_Codec_Id (Par));
+               if Codec /= Null_Codec then
+                  Aud_Codec_Ctx := avcodec_alloc_context3 (Codec);
+                  if Aud_Codec_Ctx /= Null_Codec_Ctx then
+                     Ret := avcodec_parameters_to_context (Aud_Codec_Ctx, Par);
+                     if Ret >= 0 then
+                        Ret := avcodec_open2 (Aud_Codec_Ctx, Codec,
+                                              System.Null_Address);
+                        if Ret >= 0 then
+                           Swr_Ctx := bv_swr_setup
+                             (AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, 44_100,
+                              In_Layout, In_Fmt, In_Rate);
+                           Aud_Frame := av_frame_alloc;
+                           Put_Line ("[Decoder] Audio #" & int'Image (Aud_Stream)
+                                     & "  rate=" & int'Image (In_Rate)
+                                     & "  fmt=" & int'Image (In_Fmt));
+                        end if;
+                     end if;
+                  end if;
+               end if;
+            end if;
+         end;
+      end if;
+
+      if Aud_Codec_Ctx = Null_Codec_Ctx then
+         Put_Line ("[Decoder] No audio decoder — silent playback.");
+      end if;
+
+      -- ── Get FPS ───────────────────────────────────────────────────────
       declare
-         S   : constant AVStream_Ptr := avformat_get_stream (Fmt_Ctx, Vid_Stream);
          Num, Den : int;
       begin
-         avformat_stream_framerate (S, Num, Den);
+         Get_Stream_Framerate (Fmt_Ctx, Vid_Stream, Num, Den);
          if Num > 0 and then Den > 0 then
             V_FPS := Float (Num) / Float (Den);
          else
-            -- fallback: try time_base inverse
-            avformat_stream_timebase (S, Num, Den);
+            Get_Stream_Timebase (Fmt_Ctx, Vid_Stream, Num, Den);
             if Num > 0 and then Den > 0 then
                V_FPS := Float (Den) / Float (Num);
-               -- cap to sane range
-               if V_FPS > 120.0 then V_FPS := 25.0; end if;
+               if V_FPS > 120.0 or else V_FPS < 1.0 then
+                  V_FPS := 25.0;
+               end if;
             else
                V_FPS := 25.0;
             end if;
          end if;
+         Put_Line ("[Decoder] FPS=" & Float'Image (V_FPS));
       end;
 
-      Put_Line ("[Decoder] " & Integer'Image (V_Width)
-                & "x" & Integer'Image (V_Height)
-                & "  FPS=" & Float'Image (V_FPS));
-
-      -- Allocate frame + packet
+      -- ── Alloc video frame + packet ────────────────────────────────────
       Raw_Frame := av_frame_alloc;
       Pkt       := av_packet_alloc;
       if Raw_Frame = null or else Pkt = null then
-         raise Program_Error with "[Decoder] av_frame_alloc / av_packet_alloc failed";
+         raise Program_Error with "[Decoder] Cannot alloc frame/packet";
       end if;
 
-      -- Allocate RGB conversion buffer
+      -- ── Alloc RGB buffer (reused every frame — no per-frame allocation) ─
       declare
          Buf_Size : constant int :=
            av_image_get_buffer_size (AV_PIX_FMT_RGB24,
                                      int (V_Width), int (V_Height), 1);
       begin
          if Buf_Size <= 0 then
-            raise Program_Error with "[Decoder] av_image_get_buffer_size failed";
+            raise Program_Error with "[Decoder] Cannot compute RGB buffer size";
          end if;
          RGB_Buffer := new Byte_Array (0 .. Natural (Buf_Size) - 1);
          Ret := av_image_fill_arrays
@@ -176,90 +235,124 @@ package body Video_Decoder is
          end if;
       end;
 
-      -- Build swscale context using pix_fmt from C helper
-      declare
-         Src_Fmt : constant int := avcodec_ctx_pix_fmt (Codec_Ctx);
-      begin
-         Sws_Ctx := sws_getContext
-           (int (V_Width), int (V_Height), Src_Fmt,
-            int (V_Width), int (V_Height), AV_PIX_FMT_RGB24,
-            SWS_BILINEAR,
-            System.Null_Address, System.Null_Address, System.Null_Address);
-         if Sws_Ctx = null then
-            raise Program_Error with "[Decoder] sws_getContext failed";
-         end if;
-      end;
+      -- ── Build swscale context ─────────────────────────────────────────
+      Sws_Ctx := sws_getContext
+        (int (V_Width), int (V_Height), V_Pix_Fmt,
+         int (V_Width), int (V_Height), AV_PIX_FMT_RGB24,
+         SWS_BILINEAR,
+         System.Null_Address, System.Null_Address, System.Null_Address);
+      if Sws_Ctx = null then
+         raise Program_Error with "[Decoder] sws_getContext failed";
+      end if;
 
       Width          := V_Width;
       Height         := V_Height;
       Frame_Delay_MS := Integer (1000.0 / V_FPS);
-      Put_Line ("[Decoder] Ready. Frame delay="
-                & Integer'Image (Frame_Delay_MS) & " ms");
+      Put_Line ("[Decoder] Ready — delay " & Integer'Image (Frame_Delay_MS)
+                & " ms");
    end Open;
 
+   -- ── Close ────────────────────────────────────────────────────────────
    procedure Close is
    begin
-      if Sws_Ctx   /= null then sws_freeContext (Sws_Ctx);        Sws_Ctx   := null; end if;
-      if Codec_Ctx /= null then avcodec_free_context (Codec_Ctx); Codec_Ctx := null; end if;
-      if Fmt_Ctx   /= null then avformat_close_input (Fmt_Ctx);   Fmt_Ctx   := null; end if;
-      if Raw_Frame /= null then av_frame_free (Raw_Frame);        Raw_Frame := null; end if;
-      if Pkt       /= null then av_packet_free (Pkt);             Pkt       := null; end if;
-      if RGB_Buffer /= null then Free_Bytes (RGB_Buffer); end if;
+      if Swr_Ctx       /= null           then swr_free (Swr_Ctx);                             end if;
+      if Aud_Frame     /= null           then av_frame_free (Aud_Frame); Aud_Frame := null;   end if;
+      if Aud_Codec_Ctx /= Null_Codec_Ctx then avcodec_free_context (Aud_Codec_Ctx);           end if;
+      if Sws_Ctx       /= null           then sws_freeContext (Sws_Ctx); Sws_Ctx := null;     end if;
+      if Vid_Codec_Ctx /= Null_Codec_Ctx then avcodec_free_context (Vid_Codec_Ctx);           end if;
+      if Fmt_Ctx       /= Null_Format_Ctx then avformat_close_input (Fmt_Ctx);                end if;
+      if Raw_Frame     /= null           then av_frame_free (Raw_Frame); Raw_Frame := null;   end if;
+      if Pkt           /= null           then av_packet_free (Pkt);      Pkt := null;         end if;
+      if RGB_Buffer    /= null           then Free_Bytes (RGB_Buffer);                        end if;
       Put_Line ("[Decoder] Closed.");
    end Close;
 
-   procedure Start_Decoding is
-   begin
-      Paused_Flag := False;
-      EOF_Flag    := False;
-   end Start_Decoding;
-
-   procedure Pause  is begin Paused_Flag := True;  end Pause;
-   procedure Resume is begin Paused_Flag := False; end Resume;
+   procedure Start_Decoding is begin Paused_Flag := False; EOF_Flag := False; end;
+   procedure Pause            is begin Paused_Flag := True;  end;
+   procedure Resume           is begin Paused_Flag := False; end;
    function  Is_EOF return Boolean is (EOF_Flag);
 
+   -- ── Seek ─────────────────────────────────────────────────────────────
    procedure Seek (Delta_Seconds : Float) is
-      S   : constant AVStream_Ptr := avformat_get_stream (Fmt_Ctx, Vid_Stream);
       Num, Den : int;
-      D   : int64_t;
-      Tgt : int64_t;
-      Ret : int;
+      D, Tgt   : int64_t;
+      Ret      : int;
    begin
-      avformat_stream_timebase (S, Num, Den);
+      Get_Stream_Timebase (Fmt_Ctx, Vid_Stream, Num, Den);
       if Num <= 0 or else Den <= 0 then return; end if;
       D   := int64_t (Delta_Seconds * Float (Den) / Float (Num));
-      Tgt := avformat_stream_start_time (S) + D;
+      Tgt := Get_Stream_Start_Time (Fmt_Ctx, Vid_Stream) + D;
       if Tgt < 0 then Tgt := 0; end if;
       Ret := av_seek_frame (Fmt_Ctx, Vid_Stream, Tgt, AVSEEK_FLAG_BACKWARD);
       if Ret >= 0 then
-         avcodec_flush_buffers (Codec_Ctx);
+         avcodec_flush_buffers (Vid_Codec_Ctx);
+         if Aud_Codec_Ctx /= Null_Codec_Ctx then
+            avcodec_flush_buffers (Aud_Codec_Ctx);
+         end if;
          EOF_Flag := False;
-      else
-         Put_Line ("[Decoder] Seek failed.");
       end if;
    end Seek;
 
+   -- ── Decode audio packet → push S16 PCM to ring buffer ────────────────
+   -- Uses bv_swr_convert_frame (C helper) which correctly passes ALL
+   -- audio plane pointers for planar formats like FLTP (fmt=8).
+   -- The old approach (passing only data[0] from Ada) was broken for
+   -- planar AAC/MP3 — only the left channel fed the resampler, producing
+   -- the scraping/raspy sound every ~2 seconds.
+   procedure Decode_Audio_Packet is
+      Ret     : int;
+      Out_Ptr : constant System.Address := Pcm_Buf (0)'Address;
+   begin
+      if Aud_Codec_Ctx = Null_Codec_Ctx or else Swr_Ctx = null
+         or else Aud_Frame = null
+      then return; end if;
+
+      Ret := avcodec_send_packet (Aud_Codec_Ctx, Pkt);
+      if Ret < 0 then return; end if;
+
+      loop
+         Ret := avcodec_receive_frame (Aud_Codec_Ctx, Aud_Frame);
+         exit when Ret /= 0;
+
+         declare
+            Got : constant int :=
+              bv_swr_convert_frame (Swr_Ctx, Out_Ptr, Pcm_Max_Samples,
+                                    Aud_Frame);
+         begin
+            av_frame_unref (Aud_Frame);
+            if Got > 0 then
+               -- Got output samples * 2 channels * 2 bytes/sample (S16)
+               Audio.Push_Audio (Out_Ptr, Integer (Got) * 2 * 2);
+            end if;
+         end;
+      end loop;
+   end Decode_Audio_Packet;
+
+   -- ── Next_Frame ───────────────────────────────────────────────────────
+   -- FIX: RGB_Buffer is reused — caller must NOT free Frame.Data.
+   -- The frame data pointer is valid until the next call to Next_Frame.
+   -- This eliminates the 6.5 MB-per-frame heap allocation that caused
+   -- STORAGE_ERROR (heap exhausted) within seconds of playback.
    procedure Next_Frame (Frame : out RGB_Frame; Got : out Boolean) is
-      Ret : int;
+      Ret      : int;
+      Pkt_Strm : int;
    begin
       Got   := False;
       Frame := (Data => null, Width => 0, Height => 0, Valid => False);
-
       if Paused_Flag or else EOF_Flag then return; end if;
 
       loop
          Ret := av_read_frame (Fmt_Ctx, Pkt);
-         if Ret < 0 then
-            EOF_Flag := True;
-            return;
-         end if;
+         if Ret < 0 then EOF_Flag := True; return; end if;
 
-         if Pkt.Stream_Index = Vid_Stream then
-            Ret := avcodec_send_packet (Codec_Ctx, Pkt);
+         Pkt_Strm := Get_Packet_Stream_Index (Pkt);
+
+         if Pkt_Strm = Vid_Stream then
+            Ret := avcodec_send_packet (Vid_Codec_Ctx, Pkt);
             av_packet_unref (Pkt);
 
             if Ret = 0 then
-               Ret := avcodec_receive_frame (Codec_Ctx, Raw_Frame);
+               Ret := avcodec_receive_frame (Vid_Codec_Ctx, Raw_Frame);
 
                if Ret = 0 then
                   Ret := sws_scale
@@ -270,29 +363,25 @@ package body Video_Decoder is
                   av_frame_unref (Raw_Frame);
 
                   if Ret > 0 then
-                     declare
-                        Size : constant Natural := V_Width * V_Height * 3;
-                        Buf  : constant Byte_Array_Access
-                             := new Byte_Array (0 .. Size - 1);
-                        Src  : Byte_Array (0 .. Size - 1)
-                             with Import, Address => RGB_Data (0);
-                     begin
-                        Buf.all := Src;
-                        Frame := (Data   => Buf,
-                                  Width  => V_Width,
-                                  Height => V_Height,
-                                  Valid  => True);
-                        Got := True;
-                     end;
+                     -- Point directly into the reused RGB_Buffer — no copy,
+                     -- no allocation, no heap growth.
+                     Frame := (Data   => RGB_Buffer,
+                               Width  => V_Width,
+                               Height => V_Height,
+                               Valid  => True);
+                     Got := True;
                      return;
                   end if;
 
-               elsif Ret = AVERROR_EAGAIN then
-                  null;
-               else
-                  return;
+               elsif Ret = AVERROR_EAGAIN then null;
+               else EOF_Flag := True; return;
                end if;
             end if;
+
+         elsif Pkt_Strm = Aud_Stream then
+            Decode_Audio_Packet;
+            av_packet_unref (Pkt);
+
          else
             av_packet_unref (Pkt);
          end if;
