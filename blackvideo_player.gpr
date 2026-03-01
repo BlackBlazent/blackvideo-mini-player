@@ -1,106 +1,79 @@
 -- blackvideo_player.gpr
--- Cross-platform GPR project: Windows / Linux / macOS
--- GNAT Studio compatible (no ** glob, explicit source dirs)
+-- Pure Ada project. ffmpeg_helpers.c is compiled separately in build.bat
+-- and its .o file is passed directly to the linker — this avoids the
+-- GNAT 2021 Windows bug where mixed Ada+C archives get no symbol index.
 
 project BlackVideo_Player is
 
-   -- ─────────────────────────────────────────────
-   --  OS Detection  (pass -XOS_TARGET=windows|linux|macos)
-   -- ─────────────────────────────────────────────
    type OS_Kind is ("windows", "linux", "macos");
    OS : OS_Kind := external ("OS_TARGET", "windows");
 
-   -- ─────────────────────────────────────────────
-   --  Source Directories  (explicit — no ** wildcard)
-   -- ─────────────────────────────────────────────
    for Source_Dirs use (
       "src",
       "bindings/ffmpeg",
       "bindings/sdl2"
    );
 
+   for Languages use ("Ada");   -- Ada only; C compiled separately
+
    for Object_Dir use "build/obj";
    for Exec_Dir   use "build";
    for Main       use ("main.adb");
 
-   -- ─────────────────────────────────────────────
-   --  Library / Linker (OS-specific)
-   -- ─────────────────────────────────────────────
+   -- ── Compiler ──────────────────────────────────────────────────────────
+   package Compiler is
+      for Default_Switches ("Ada") use (
+         "-g", "-O2", "-gnat2012", "-gnatwa", "-gnatQ"
+      );
+   end Compiler;
+
+   -- ── Linker ────────────────────────────────────────────────────────────
+   -- ffmpeg_helpers.o is passed directly here, built by build.bat before
+   -- gprbuild runs. No intermediate archive — no ranlib needed.
    package Linker is
       case OS is
-
          when "windows" =>
-            for Linker_Options use (
-               "-Llib",                  -- search lib\ first
-               "-lSDL2",                 -- libSDL2.a  (from SDL2-devel MinGW)
-               "-lavcodec",              -- libavcodec.dll.a  (FFmpeg shared)
-               "-lavformat",
-               "-lavutil",
-               "-lswscale",
-               "-lswresample",
-               "-lole32",
-               "-loleaut32",
-               "-lwinmm",
-               "-lversion",
-               "-limm32",
-               "-lsetupapi",
-               "-mwindows"
+            for Switches ("Ada") use (
+               project'Project_Dir & "build/obj/ffmpeg_helpers.o",
+               project'Project_Dir & "resources/blackvideo.o",
+               "-L" & project'Project_Dir & "lib",
+               "-lSDL2main", "-lSDL2",
+               "-lavcodec", "-lavformat", "-lavutil",
+               "-lswscale", "-lswresample",
+               "-lole32", "-loleaut32", "-lwinmm",
+               "-lversion", "-limm32", "-lsetupapi", "-luuid",
+               "-Wl,--subsystem,console"
             );
-
          when "linux" =>
-            for Linker_Options use (
+            for Switches ("Ada") use (
+               project'Project_Dir & "build/obj/ffmpeg_helpers.o",
+               "-L" & project'Project_Dir & "lib",
                "-lSDL2",
-               "-lavcodec",
-               "-lavformat",
-               "-lavutil",
-               "-lswscale",
-               "-lswresample",
-               "-lpthread",
-               "-ldl",
-               "-lm"
+               "-lavcodec", "-lavformat", "-lavutil",
+               "-lswscale", "-lswresample",
+               "-lpthread", "-ldl", "-lm"
             );
-
          when "macos" =>
-            for Linker_Options use (
+            for Switches ("Ada") use (
+               project'Project_Dir & "build/obj/ffmpeg_helpers.o",
+               "-L" & project'Project_Dir & "lib",
                "-lSDL2",
-               "-lavcodec",
-               "-lavformat",
-               "-lavutil",
-               "-lswscale",
-               "-lswresample",
+               "-lavcodec", "-lavformat", "-lavutil",
+               "-lswscale", "-lswresample",
                "-framework", "CoreFoundation",
                "-framework", "AudioToolbox",
                "-framework", "CoreVideo",
                "-framework", "Cocoa"
             );
-
       end case;
    end Linker;
 
-   -- ─────────────────────────────────────────────
-   --  Compiler
-   -- ─────────────────────────────────────────────
-   package Compiler is
-      for Default_Switches ("Ada") use (
-         "-g",
-         "-O2",
-         "-gnat2012",      -- use 2012 for widest GNAT compatibility
-         "-gnatwa",        -- all warnings
-         "-gnatQ"          -- continue on errors (see all errors at once)
-      );
-   end Compiler;
-
-   -- ─────────────────────────────────────────────
-   --  Builder
-   -- ─────────────────────────────────────────────
+   -- ── Builder ───────────────────────────────────────────────────────────
    package Builder is
       for Executable ("main.adb") use "blackvideo-player";
-      for Default_Switches ("Ada") use ("-j0");   -- use all CPU cores
+      for Default_Switches ("Ada") use ("-j0");
    end Builder;
 
-   -- ─────────────────────────────────────────────
-   --  IDE / GNAT Studio
-   -- ─────────────────────────────────────────────
    package IDE is
       for VCS_Kind use "Git";
    end IDE;
