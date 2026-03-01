@@ -1,5 +1,7 @@
 ![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%3AVisitor&labelColor=%23000000&countColor=%2337d67a&style=flat&labelStyle=lower)
 
+<img src="./public/screenshot.png" alt="Screenshot"/>
+
 # BlackVideo Mini Player
 
 Lightweight cross-platform video player (Ada + SDL2 + FFmpeg). Support player for the [BlackVideo](https://github.com/BlackBlazent/BlackVideo). Works standalone via **CLI** or **right-click** on any video file.
