@@ -1,4 +1,17 @@
+# /obj/
+# /bin/
+# /alire/
+# /config/
+__docs__/
+backup/
+.VSCodeCounter/
+dist/
+utils/
 build/
+release/
+Output/
+utils/
+samples/
 *.o
 *.ali
 *.exe
@@ -6,5 +19,7 @@ build/
 *.a
 *.so
 *.dylib
-alire/
-.alire/
+# alire/
+error/
+# .alire/
+
