@@ -1,3 +1,7 @@
+:: ============================================================
+:: BlackVideo Mini Player - Context Menu Installer
+:: ============================================================
+
 @echo off
 setlocal enabledelayedexpansion
 
