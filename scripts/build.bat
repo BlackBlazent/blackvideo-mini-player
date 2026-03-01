@@ -18,14 +18,14 @@ if exist "blackvideo_player.gpr" (
 )
 echo.
 
-:: ── Delete old conflicting file ───────────────────────────────────────────
-if exist "bindings\sdl2\sdl-video.adb" (
-    del /q "bindings\sdl2\sdl-video.adb"
-    echo [FIX] Deleted old bindings\sdl2\sdl-video.adb
-    echo.
-)
+:: ── Delete ALL stale .adb files that conflict with current architecture ───
+set "STALE=0"
+if exist "bindings\ffmpeg\ffmpeg-avcodec.adb"  ( del /q "bindings\ffmpeg\ffmpeg-avcodec.adb"  & echo [FIX] Deleted stale bindings\ffmpeg\ffmpeg-avcodec.adb  & set "STALE=1" )
+if exist "bindings\ffmpeg\ffmpeg-avformat.adb" ( del /q "bindings\ffmpeg\ffmpeg-avformat.adb" & echo [FIX] Deleted stale bindings\ffmpeg\ffmpeg-avformat.adb & set "STALE=1" )
+if exist "bindings\sdl2\sdl-video.adb"         ( del /q "bindings\sdl2\sdl-video.adb"         & echo [FIX] Deleted stale bindings\sdl2\sdl-video.adb          & set "STALE=1" )
+if "%STALE%"=="1" echo.
 
-:: ── Find gprbuild ─────────────────────────────────────────────────────────
+:: ── Find GNAT tools ───────────────────────────────────────────────────────
 set "GPRBUILD="
 for %%x in (gprbuild.exe) do set "GPRBUILD=%%~$PATH:x"
 if defined GPRBUILD goto :found_gprbuild
@@ -38,50 +38,56 @@ if not defined GPRBUILD (
     echo ERROR: gprbuild.exe not found. Add C:\gnat\2021\bin to PATH.
     pause & exit /b 1
 )
+
+:: GCC is in the same bin dir as gprbuild
+for %%F in ("%GPRBUILD%") do set "GNAT_BIN=%%~dpF"
+set "GCC=%GNAT_BIN%gcc.exe"
+if not exist "%GCC%" (
+    echo ERROR: gcc.exe not found at %GCC%
+    pause & exit /b 1
+)
 echo [OK] gprbuild: %GPRBUILD%
+echo [OK] gcc:      %GCC%
 echo.
 
-:: ── Check FFmpeg headers (needed to compile ffmpeg_helpers.c) ─────────────
-echo Checking FFmpeg headers in lib\include...
-if not exist "lib\include\libavformat\avformat.h" (
-    echo   MISSING: lib\include\libavformat\avformat.h
+:: ── Check FFmpeg headers (required by src\ffmpeg_helpers.c) ──────────────
+echo Checking FFmpeg headers in lib\include\ ...
+set "HDR_OK=1"
+for %%H in (libavformat\avformat.h libavcodec\avcodec.h libavutil\avutil.h) do (
+    if not exist "lib\include\%%H" (
+        echo   MISSING: lib\include\%%H
+        set "HDR_OK=0"
+    )
+)
+if "%HDR_OK%"=="0" (
     echo.
-    echo   You need FFmpeg dev headers. Copy from your FFmpeg package:
-    echo     ffmpeg-8.0.1-full_build-shared\include\  ->  lib\include\
-    echo.
-    echo   Or download headers-only from:
-    echo     https://github.com/BtbN/FFmpeg-Builds/releases
-    echo     (get the -dev or -lgpl-shared build which includes include\)
+    echo   Copy the FFmpeg headers into lib\include\:
+    echo     ffmpeg-8.0.1-full_build-shared\include\  -->  lib\include\
     echo.
     pause & exit /b 1
-) else (
-    echo   [OK] FFmpeg headers present.
 )
+echo   [OK] FFmpeg headers present.
 echo.
 
 :: ── Check import libraries ────────────────────────────────────────────────
 echo Checking lib\ import libraries...
 set "MISSING=0"
-
 if not exist "lib\libSDL2.a"     ( echo   MISSING: lib\libSDL2.a     & set "MISSING=1" )
 if not exist "lib\libSDL2main.a" ( echo   MISSING: lib\libSDL2main.a & set "MISSING=1" )
-
-:: Copy .dll.a to .a if plain .a not present (MinGW needs plain .a name)
 for %%N in (avcodec avformat avutil swscale swresample) do (
     if not exist "lib\lib%%N.a" (
         if exist "lib\lib%%N.dll.a" (
             copy /y "lib\lib%%N.dll.a" "lib\lib%%N.a" >nul
-            echo   [FIX] lib\lib%%N.dll.a -> lib\lib%%N.a
+            echo   [FIX] lib\lib%%N.dll.a copied to lib\lib%%N.a
         ) else (
             echo   MISSING: lib\lib%%N.a
             set "MISSING=1"
         )
     )
 )
-
 if "%MISSING%"=="1" (
     echo.
-    echo ERROR: Copy missing files into lib\ then retry.
+    echo ERROR: Copy missing .a files into lib\ then retry.
     pause & exit /b 1
 )
 echo   [OK] All import libs ready.
@@ -90,15 +96,35 @@ echo.
 :: ── Create build dirs ─────────────────────────────────────────────────────
 if not exist "build\obj" mkdir "build\obj"
 
-:: ── Build ─────────────────────────────────────────────────────────────────
-echo Building...
+:: ── STEP 1: Compile ffmpeg_helpers.c with gcc directly ───────────────────
+:: This bypasses GPRbuild's mixed-language archive entirely.
+:: The .o file is passed directly to the linker via blackvideo_player.gpr.
+echo Compiling C helper (ffmpeg_helpers.c)...
+"%GCC%" -O2 -c "src\ffmpeg_helpers.c" ^
+    -I"lib\include" ^
+    -o "build\obj\ffmpeg_helpers.o"
+
+if errorlevel 1 (
+    echo.
+    echo ==========================================
+    echo  C COMPILE FAILED - see errors above
+    echo ==========================================
+    pause & exit /b 1
+)
+echo   [OK] build\obj\ffmpeg_helpers.o
+echo.
+
+:: ── STEP 2: Build Ada sources and link everything ─────────────────────────
+:: Pure Ada project now — no mixed-language archive, no ranlib needed.
+:: ffmpeg_helpers.o is linked directly via GPR Linker switches.
+echo Building Ada sources and linking...
 echo.
 "%GPRBUILD%" -P blackvideo_player.gpr -XOS_TARGET=windows -j0
 
 if errorlevel 1 (
     echo.
     echo ==========================================
-    echo  BUILD FAILED — see errors above
+    echo  BUILD FAILED - see errors above
     echo ==========================================
     pause & exit /b 1
 )
