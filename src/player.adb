@@ -1,6 +1,5 @@
 -- player.adb
 -- BlackVideo Mini Player - Core Player
--- Uses flat SDL_Event extractors (no Ada discriminated union mapping to C union)
 
 with Ada.Text_IO;
 with Ada.Exceptions;
@@ -25,9 +24,6 @@ package body Player is
    use SDL.Events;
    use SDL.Events.Keyboards;
 
-   -- ─────────────────────────────────────────────
-   --  State
-   -- ─────────────────────────────────────────────
    State      : Player_State := Stopped;
    Volume     : Integer      := 80;
    Fullscreen : Boolean      := False;
@@ -36,18 +32,12 @@ package body Player is
    function Current_Volume return Integer      is (Volume);
    function Is_Fullscreen  return Boolean      is (Fullscreen);
 
-   -- ─────────────────────────────────────────────
-   --  Forward declaration — Handle_Key is defined after Run
-   --  but called inside Run's event loop.
-   -- ─────────────────────────────────────────────
    procedure Handle_Key
      (Ev   : SDL.Events.SDL_Event;
       Win  : SDL.Video.Window_Handle;
       Quit : out Boolean);
 
-   -- ─────────────────────────────────────────────
-   --  Run
-   -- ─────────────────────────────────────────────
+   -- ── Run ──────────────────────────────────────────────────────────────
    procedure Run (Video_File : String) is
       Win  : SDL.Video.Window_Handle;
       Rend : SDL.Video.Renderer_Handle;
@@ -60,6 +50,12 @@ package body Player is
       Vid_H          : Integer;
       Frame_Delay_MS : Integer;
       Ret            : int;
+
+      -- Frame timing: measure how long each iteration actually takes and
+      -- sleep only the remainder, so the video runs at the correct speed.
+      Frame_Start : unsigned;
+      Elapsed     : unsigned;
+      Sleep_MS    : unsigned;
    begin
       Put_Line ("[Player] Init SDL2 ...");
       Ret := SDL.Initialize (SDL.Flags.Enable_Video or SDL.Flags.Enable_Audio);
@@ -67,11 +63,9 @@ package body Player is
          raise Program_Error with "[Player] SDL_Init failed";
       end if;
 
-      --  Open decoder
       Put_Line ("[Player] Opening: " & Video_File);
       Video_Decoder.Open (Video_File, Vid_W, Vid_H, Frame_Delay_MS);
 
-      --  Create window
       SDL.Video.Windows.Create
         (Win,
          Title  => "BlackVideo - " & Utils.Base_Name (Video_File),
@@ -81,41 +75,33 @@ package body Player is
          Height => int (Vid_H),
          Flags  => SDL.Video.Windows.Resizable);
 
-      --  Create renderer
       SDL.Video.Renderers.Create
         (Rend, Win,
          Flags => SDL.Video.Renderers.SDL_RENDERER_ACCELERATED
                   or SDL.Video.Renderers.SDL_RENDERER_PRESENTVSYNC);
 
-      --  Create streaming texture
       Renderer.Init_Texture (Rend, Tex, Vid_W, Vid_H);
-
-      --  Init audio
       Audio.Init (Volume);
-
-      --  Start decode
       Video_Decoder.Start_Decoding;
       Audio.Start;
 
       State := Playing;
       Put_Line ("[Player] Playing. SPACE=pause  F=fullscreen  Q/ESC=quit");
 
-      -- ─────────────────────────────────────────
-      --  Main loop
-      -- ─────────────────────────────────────────
+      -- ── Main loop ─────────────────────────────────────────────────────
       while not Quit loop
 
-         --  ── Event pump ────────────────────────
+         Frame_Start := SDL.Get_Ticks;
+
+         -- ── Event pump ────────────────────────────────────────────────
          while SDL.Events.Poll (Ev) loop
             declare
                Ev_Type : constant unsigned := SDL.Events.Event_Type (Ev);
             begin
                if Ev_Type = SDL_QUIT then
                   Quit := True;
-
                elsif Ev_Type = SDL_KEYDOWN then
                   Handle_Key (Ev, Win, Quit);
-
                elsif Ev_Type = SDL_WINDOWEVENT then
                   if SDL.Events.Window_Sub_Event (Ev)
                      = SDL_WINDOWEVENT_SIZE_CHANGED
@@ -128,7 +114,7 @@ package body Player is
             end;
          end loop;
 
-         --  ── Decode + display ──────────────────
+         -- ── Decode + display ──────────────────────────────────────────
          if State = Playing then
             declare
                Frame : Video_Decoder.RGB_Frame;
@@ -145,11 +131,19 @@ package body Player is
          end if;
 
          Renderer.Draw (Rend, Tex, Vid_W, Vid_H);
-         SDL.Delay_MS (unsigned (Frame_Delay_MS));
+
+         -- ── Frame pacing: sleep only the time remaining in this frame ──
+         -- Without this, decode+render time adds to the fixed delay,
+         -- making the video run slower than its actual FPS.
+         Elapsed := SDL.Get_Ticks - Frame_Start;
+         if Elapsed < unsigned (Frame_Delay_MS) then
+            Sleep_MS := unsigned (Frame_Delay_MS) - Elapsed;
+            SDL.Delay_MS (Sleep_MS);
+         end if;
+         -- If elapsed >= Frame_Delay_MS (heavy frame), don't sleep at all.
 
       end loop;
 
-      --  ── Cleanup ──────────────────────────────
       Put_Line ("[Player] Shutting down ...");
       Audio.Stop;
       Video_Decoder.Close;
@@ -166,9 +160,7 @@ package body Player is
          raise;
    end Run;
 
-   -- ─────────────────────────────────────────────
-   --  Handle_Key  (uses SDL.Events extractors)
-   -- ─────────────────────────────────────────────
+   -- ── Handle_Key ───────────────────────────────────────────────────────
    procedure Handle_Key
      (Ev   : SDL.Events.SDL_Event;
       Win  : SDL.Video.Window_Handle;
@@ -180,39 +172,32 @@ package body Player is
 
       if K = SDLK_ESCAPE or else K = SDLK_q then
          Quit := True;
-
       elsif K = SDLK_SPACE then
          if State = Playing then
             State := Paused;
-            Video_Decoder.Pause;   Audio.Pause;
+            Video_Decoder.Pause; Audio.Pause;
             Put_Line ("[Player] Paused");
          else
             State := Playing;
-            Video_Decoder.Resume;  Audio.Resume;
+            Video_Decoder.Resume; Audio.Resume;
             Put_Line ("[Player] Resumed");
          end if;
-
       elsif K = SDLK_LEFT then
          Video_Decoder.Seek (-5.0);
          Put_Line ("[Player] Seek -5 s");
-
       elsif K = SDLK_RIGHT then
          Video_Decoder.Seek (+5.0);
          Put_Line ("[Player] Seek +5 s");
-
       elsif K = SDLK_UP then
          Volume := Integer'Min (Volume + 10, 128);
          Audio.Set_Volume (Volume);
          Put_Line ("[Player] Volume =" & Integer'Image (Volume));
-
       elsif K = SDLK_DOWN then
          Volume := Integer'Max (Volume - 10, 0);
          Audio.Set_Volume (Volume);
          Put_Line ("[Player] Volume =" & Integer'Image (Volume));
-
       elsif K = SDLK_m then
          Audio.Toggle_Mute;
-
       elsif K = SDLK_f then
          Fullscreen := not Fullscreen;
          SDL.Video.Windows.Set_Fullscreen (Win, Fullscreen);
