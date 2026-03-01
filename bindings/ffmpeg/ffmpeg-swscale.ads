@@ -9,7 +9,7 @@ with FFmpeg.AVUtil;
 package FFmpeg.SWScale is
 
    use Interfaces.C;
-   -- use FFmpeg.AVUtil;
+   -- Note: FFmpeg.AVUtil types referenced by full name below (no use clause needed)
 
    -- ─────────────────────────────────────────────
    --  SwsContext (opaque)
