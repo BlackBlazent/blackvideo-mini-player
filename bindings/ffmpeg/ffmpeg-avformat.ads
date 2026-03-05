@@ -86,4 +86,14 @@ package FFmpeg.AVFormat is
       Flags        : int) return int
    with Import, Convention => C, External_Name => "av_seek_frame";
 
+
+   -- ── Duration and position (implemented in ffmpeg_helpers.c) ──────────
+   function Get_Format_Duration (IC : AVFormatContext_Ptr) return Long_Float
+   with Import, Convention => C, External_Name => "bv_format_duration";
+
+   function Get_Packet_PTS_Seconds
+     (IC  : AVFormatContext_Ptr;
+      Pkt : FFmpeg.AVCodec.AVPacket_Ptr) return Long_Float
+   with Import, Convention => C, External_Name => "bv_packet_pts_seconds";
+
 end FFmpeg.AVFormat;

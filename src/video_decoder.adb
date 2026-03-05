@@ -53,8 +53,9 @@ package body Video_Decoder is
      array (0 .. Pcm_Max_Samples * 2 * 2 - 1) of Interfaces.C.unsigned_char;
    Pcm_Buf : PCM_Buffer;
 
-   Paused_Flag : Boolean := False;
-   EOF_Flag    : Boolean := False;
+   Paused_Flag  : Boolean    := False;
+   EOF_Flag     : Boolean    := False;
+   Current_Pos  : Long_Float := 0.0;  -- seconds, updated per packet
 
    procedure Free_Bytes is new Ada.Unchecked_Deallocation
      (Byte_Array, Byte_Array_Access);
@@ -347,6 +348,16 @@ package body Video_Decoder is
 
          Pkt_Strm := Get_Packet_Stream_Index (Pkt);
 
+         -- Track current position via packet PTS
+         declare
+            Pts : constant Long_Float :=
+              Get_Packet_PTS_Seconds (Fmt_Ctx, Pkt);
+         begin
+            if Pts > 0.0 then
+               Current_Pos := Pts;
+            end if;
+         end;
+
          if Pkt_Strm = Vid_Stream then
             Ret := avcodec_send_packet (Vid_Codec_Ctx, Pkt);
             av_packet_unref (Pkt);
@@ -387,5 +398,39 @@ package body Video_Decoder is
          end if;
       end loop;
    end Next_Frame;
+
+
+   -- ── Get_Position ─────────────────────────────────────────────────────
+   function Get_Position return Float is
+   begin
+      return Float (Current_Pos);
+   end Get_Position;
+
+   -- ── Get_Duration ─────────────────────────────────────────────────────
+   function Get_Duration return Float is
+   begin
+      return Float (Get_Format_Duration (Fmt_Ctx));
+   end Get_Duration;
+
+   -- ── Seek_To — absolute seek in seconds ───────────────────────────────
+   procedure Seek_To (Seconds : Float) is
+      Num, Den : int;
+      Tgt      : int64_t;
+      Ret      : int;
+   begin
+      Get_Stream_Timebase (Fmt_Ctx, Vid_Stream, Num, Den);
+      if Num <= 0 or else Den <= 0 then return; end if;
+      Tgt := int64_t (Long_Float (Seconds) * Long_Float (Den) / Long_Float (Num));
+      if Tgt < 0 then Tgt := 0; end if;
+      Ret := av_seek_frame (Fmt_Ctx, Vid_Stream, Tgt, AVSEEK_FLAG_BACKWARD);
+      if Ret >= 0 then
+         avcodec_flush_buffers (Vid_Codec_Ctx);
+         if Aud_Codec_Ctx /= Null_Codec_Ctx then
+            avcodec_flush_buffers (Aud_Codec_Ctx);
+         end if;
+         Current_Pos := Long_Float (Seconds);
+         EOF_Flag    := False;
+      end if;
+   end Seek_To;
 
 end Video_Decoder;

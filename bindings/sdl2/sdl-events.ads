@@ -38,6 +38,25 @@ package SDL.Events is
    function Key_Sym         (E : SDL_Event) return int;
    function Key_Scancode    (E : SDL_Event) return int;
 
+   SDL_MOUSEBUTTONUP   : constant unsigned := 16#402#;
+   SDL_MOUSEWHEEL      : constant unsigned := 16#403#;
+
+   -- Mouse button codes
+   SDL_BUTTON_LEFT   : constant unsigned_char := 1;
+   SDL_BUTTON_MIDDLE : constant unsigned_char := 2;
+   SDL_BUTTON_RIGHT  : constant unsigned_char := 3;
+
+   -- ─── Mouse field extractors ───────────────────────────────────────────
+   -- SDL_MouseMotionEvent: x@24 y@28
+   function Mouse_X      (E : SDL_Event) return int;
+   function Mouse_Y      (E : SDL_Event) return int;
+   -- SDL_MouseButtonEvent: button@12 x@24 y@28
+   function Mouse_Button (E : SDL_Event) return unsigned_char;
+   function Mouse_Btn_X  (E : SDL_Event) return int;
+   function Mouse_Btn_Y  (E : SDL_Event) return int;
+   -- SDL_MouseWheelEvent: y@20 (positive = scroll up)
+   function Mouse_Wheel_Y (E : SDL_Event) return int;
+
    -- ─── Poll ─────────────────────────────────────────────────────────────
    function Poll (E : out SDL_Event) return Boolean;
 

@@ -3,6 +3,7 @@
 
 with Ada.Text_IO;
 with Interfaces.C;
+with System;
 with SDL.Video;
 with SDL.Video.Renderers;
 with SDL.Video.Textures;
@@ -12,16 +13,13 @@ package body Renderer is
 
    use Ada.Text_IO;
    use Interfaces.C;
-   use Video_Decoder;   -- makes Byte_Array_Access indexing visible (fixes error 59)
+   use Video_Decoder;
 
    Native_W : Integer := 0;
    Native_H : Integer := 0;
    Win_W    : Integer := 0;
    Win_H    : Integer := 0;
 
-   -- ─────────────────────────────────────────────
-   --  Init_Texture
-   -- ─────────────────────────────────────────────
    procedure Init_Texture
      (Rend   : SDL.Video.Renderer_Handle;
       Tex    : out SDL.Video.Texture_Handle;
@@ -33,24 +31,16 @@ package body Renderer is
       Native_H := Height;
       Win_W    := Width;
       Win_H    := Height;
-
       SDL.Video.Textures.Create
-        (Tex,
-         Rend,
+        (Tex, Rend,
          Format      => SDL.Video.SDL_PIXELFORMAT_RGB24,
          Access_Kind => SDL.Video.SDL_TEXTUREACCESS_STREAMING,
          Width       => int (Width),
          Height      => int (Height));
-
       Put_Line ("[Renderer] Texture "
                 & Integer'Image (Width) & "x" & Integer'Image (Height));
    end Init_Texture;
 
-   -- ─────────────────────────────────────────────
-   --  Upload_Frame
-   --  Frame.Data is Byte_Array_Access; indexing (0) requires
-   --  Video_Decoder to be use-visible so the array type is known.
-   -- ─────────────────────────────────────────────
    procedure Upload_Frame
      (Tex    : SDL.Video.Texture_Handle;
       Frame  : Video_Decoder.RGB_Frame;
@@ -58,20 +48,14 @@ package body Renderer is
       Height : Integer)
    is
       pragma Unreferenced (Height);
-      Pitch : constant int := int (Width) * 3;   -- RGB24 = 3 bytes/pixel
+      Pitch : constant int := int (Width) * 3;
    begin
-      if not Frame.Valid or else Frame.Data = null then
-         return;
-      end if;
-      SDL.Video.Textures.Update
-        (Tex,
-         Pixels => Frame.Data (0)'Address,   -- requires 'use Video_Decoder'
+      if not Frame.Valid or else Frame.Data = null then return; end if;
+      SDL.Video.Textures.Update (Tex,
+         Pixels => Frame.Data (0)'Address,
          Pitch  => Pitch);
    end Upload_Frame;
 
-   -- ─────────────────────────────────────────────
-   --  Fit_Rect — letterbox/pillarbox aspect-ratio rect
-   -- ─────────────────────────────────────────────
    function Fit_Rect return SDL.Video.SDL_Rect is
       Scale_X : constant Float := Float (Win_W) / Float (Native_W);
       Scale_Y : constant Float := Float (Win_H) / Float (Native_H);
@@ -85,9 +69,8 @@ package body Renderer is
         (X => int (DX), Y => int (DY), W => int (DW), H => int (DH));
    end Fit_Rect;
 
-   -- ─────────────────────────────────────────────
-   --  Draw
-   -- ─────────────────────────────────────────────
+   -- Draw: clear + copy video texture. Does NOT call Present.
+   -- Caller draws the UI overlay then calls Present.
    procedure Draw
      (Rend   : SDL.Video.Renderer_Handle;
       Tex    : SDL.Video.Texture_Handle;
@@ -100,24 +83,30 @@ package body Renderer is
       SDL.Video.Renderers.Set_Draw_Color (Rend, 0, 0, 0, 255);
       SDL.Video.Renderers.Clear (Rend);
       SDL.Video.Renderers.Copy (Rend, Tex, Dst);
-      SDL.Video.Renderers.Present (Rend);
+      -- NOTE: No Present here — overlay draws after this
    end Draw;
 
-   -- ─────────────────────────────────────────────
-   --  On_Resize
-   -- ─────────────────────────────────────────────
+   procedure Present (Rend : SDL.Video.Renderer_Handle) is
+   begin
+      SDL.Video.Renderers.Present (Rend);
+   end Present;
+
    procedure On_Resize (New_Width : Integer; New_Height : Integer) is
    begin
       Win_W := New_Width;
       Win_H := New_Height;
    end On_Resize;
 
-   -- ─────────────────────────────────────────────
-   --  Destroy_Texture
-   -- ─────────────────────────────────────────────
    procedure Destroy_Texture (Tex : in out SDL.Video.Texture_Handle) is
    begin
       SDL.Video.Textures.Destroy (Tex);
    end Destroy_Texture;
+
+   function To_Address (Rend : SDL.Video.Renderer_Handle)
+     return System.Address
+   is
+   begin
+      return System.Address (Rend);
+   end To_Address;
 
 end Renderer;
