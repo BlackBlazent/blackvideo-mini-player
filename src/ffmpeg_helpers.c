@@ -153,3 +153,25 @@ SwrContext* bv_swr_setup(
     if (ret < 0) { swr_free(&swr); return NULL; }
     return swr;
 }
+
+/* ── Duration and position ────────────────────────────────────────────────
+ * bv_format_duration: total file duration in seconds (float).
+ * bv_stream_position: current decode position in seconds via last packet PTS.
+ */
+double bv_format_duration(AVFormatContext *ic) {
+    if (!ic) return 0.0;
+    if (ic->duration == AV_NOPTS_VALUE) return 0.0;
+    return (double)ic->duration / (double)AV_TIME_BASE;
+}
+
+/* bv_packet_pts_seconds: convert a packet's PTS to seconds using the
+ * stream timebase. Called after av_read_frame but before av_packet_unref. */
+double bv_packet_pts_seconds(AVFormatContext *ic, AVPacket *pkt) {
+    if (!ic || !pkt) return 0.0;
+    int idx = pkt->stream_index;
+    if (idx < 0 || (unsigned)idx >= ic->nb_streams) return 0.0;
+    AVRational tb = ic->streams[idx]->time_base;
+    int64_t pts = (pkt->pts != AV_NOPTS_VALUE) ? pkt->pts : pkt->dts;
+    if (pts == AV_NOPTS_VALUE) return 0.0;
+    return (double)pts * av_q2d(tb);
+}
