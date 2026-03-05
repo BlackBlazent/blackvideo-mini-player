@@ -8,10 +8,12 @@ backup/
 dist/
 utils/
 build/
+test/
 release/
 Output/
 utils/
 samples/
+lib/include/
 *.o
 *.ali
 *.exe
