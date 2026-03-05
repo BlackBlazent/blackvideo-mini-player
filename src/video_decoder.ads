@@ -37,4 +37,11 @@ package Video_Decoder is
    procedure Next_Frame (Frame : out RGB_Frame; Got : out Boolean);
    function  Is_EOF     return Boolean;
 
+   -- ─── Playback position / duration (seconds) ───────────────────────────
+   function Get_Position return Float;   -- current decode position
+   function Get_Duration return Float;   -- total file duration
+
+   -- ─── Seek to absolute position ────────────────────────────────────────
+   procedure Seek_To (Seconds : Float);  -- absolute seek (not delta)
+
 end Video_Decoder;
