@@ -5,8 +5,8 @@
 New update **2.2.0** is here as a stable release. This includes fully working playback controls, a context menu, audio stability fixes for long videos, and a corrected SDL2 event struct layout.
 <br/>
 
-- **Download** it [here]() on SourceForge or in the [release]() page.
-- [**Change logs**]()
+- **Download** it [here](https://sourceforge.net/projects/blackvideo-mini-player/files/blackvideo-mini-player-v2.2.0.zip/download) on SourceForge or in the [release](https://github.com/BlackBlazent/blackvideo-mini-player/releases/tag/v2.2.0) page.
+- [**Change logs**](https://github.com/BlackBlazent/blackvideo-mini-player/compare/1.1.0...v2.2.0)
 
 <img src="./public/screenshot.png" alt="Screenshot"/>
 
@@ -141,6 +141,8 @@ blackvideo-mini-player/
 3. Download [SDL2_ttf development libraries](https://github.com/libsdl-org/SDL_ttf/releases)
 4. Download [FFmpeg shared builds](https://github.com/BtbN/FFmpeg-Builds/releases) (win64-lgpl)
 5. Copy headers and `.a` import libraries into `lib/` — see [Required Files](#required-files) below.
+
+> [**Download**](https://www.mediafire.com/file/at0tyazvbyqfc0l/prerequisites-setup.zip/file) this setup: `lib/` and `build/` (Windows) ✨ 
 
 #### Build
 ```bat
