@@ -25,7 +25,7 @@ procedure Main is
    end Full_Path;
 
 begin
-   Put_Line ("BlackVideo Mini Player v1.0  (Ada + SDL2 + FFmpeg)");
+   Put_Line ("BlackVideo Mini Player v2.2  (Ada + SDL2 + FFmpeg)");
    New_Line;
 
    if Argument_Count = 0 then
