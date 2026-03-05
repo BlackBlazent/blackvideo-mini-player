@@ -1,5 +1,19 @@
 -- audio.adb
--- BlackVideo Mini Player - SDL2 Audio with ring buffer
+-- BlackVideo Mini Player - SDL2 Audio  v2.2
+--
+-- Fixes vs v2.0:
+--   * SDL_LockAudioDevice / SDL_UnlockAudioDevice wrap all Push_Audio
+--     ring-buffer writes so there is no race with the SDL audio thread.
+--     Without this, torn reads of Ring_Avail at 50min+ caused the
+--     "scattered / mixed" audio glitch.
+--   * Ring buffer increased to 2 MB (~12 s at 44100 Hz stereo S16)
+--     so decode bursts never overflow even during 1080p H.264.
+--   * SDL_AUDIO_ALLOW_* flags set to 0 — we refuse any SDL changes to
+--     sample rate, format, or channel count. If SDL silently resampled
+--     to a different rate the audio pitch/sync would drift over time.
+--   * On overflow we now drop NEWEST data (skip the incoming burst)
+--     instead of dropping oldest (which causes audible skips in
+--     already-buffered audio).
 
 with Ada.Text_IO;
 with Interfaces.C;
@@ -14,24 +28,22 @@ package body Audio is
    use SDL.Audio;
 
    Dev          : Audio_Device_ID := Invalid_Device;
-   Vol          : Integer         := 80;   -- 0..128
+   Vol          : Integer         := 80;
    Muted        : Boolean         := False;
    Pre_Mute_Vol : Integer         := 80;
 
-   -- Ring buffer: 256 KiB — large enough to absorb decode bursts
-   -- at 44100 Hz stereo S16 = 4 bytes/sample → ~1.5 seconds of audio
-   Ring_Size  : constant := 262_144;
+   -- 2 MB ring: ~12 seconds at 44100 Hz stereo S16 (4 bytes/sample)
+   -- Absorbs long decode bursts that happen mid-movie with H.264 B-frames.
+   Ring_Size  : constant := 2_097_152;
    Ring       : array (0 .. Ring_Size - 1) of unsigned_char;
    Ring_Read  : Integer := 0;
    Ring_Write : Integer := 0;
    Ring_Avail : Integer := 0;
 
    -- ── Fill_Audio — SDL2 audio callback ─────────────────────────────────
-   -- Called by SDL in a separate thread when it needs more audio data.
-   -- Copies bytes from the ring buffer into SDL's output stream.
-   -- Volume is applied by scaling each S16 sample inline.
-   -- We do NOT use SDL_MixAudioFormat(stream, stream, ...) — that would
-   -- mix the audio with itself, doubling amplitude and causing distortion.
+   -- Called on the SDL audio thread. The lock is already held by SDL while
+   -- the callback runs, so we do NOT call Lock/Unlock here — doing so
+   -- would deadlock. We just read from the ring and apply volume.
    procedure Fill_Audio
      (User_Data : System.Address;
       Stream    : System.Address;
@@ -48,20 +60,14 @@ package body Audio is
       Dst : array (0 .. N - 1) of unsigned_char
           with Import, Address => Stream;
    begin
-      -- Always zero the buffer first (silence if ring is empty)
       for I in 0 .. N - 1 loop
          Dst (I) := 0;
       end loop;
 
       if Ring_Avail <= 0 or else Muted then return; end if;
 
-      -- Copy from ring buffer then apply volume via SDL_MixAudioFormat.
-      -- SDL_MixAudioFormat(dst, src, ...) with DIFFERENT dst and src is
-      -- the correct way to mix with volume — src is the ring data,
-      -- dst is the zeroed stream buffer.
       declare
          To_Copy : constant Integer := Integer'Min (N, Ring_Avail);
-         -- Temporary buffer to hold the ring data before mixing into dst
          Tmp : array (0 .. To_Copy - 1) of unsigned_char;
       begin
          for I in 0 .. To_Copy - 1 loop
@@ -70,50 +76,60 @@ package body Audio is
             Ring_Avail := Ring_Avail - 1;
          end loop;
 
-         -- Mix Tmp → Dst with volume scaling.
-         -- This is the intended use: src /= dst.
          SDL_MixAudioFormat
-           (Stream,          -- dst (zeroed)
-            Tmp (0)'Address, -- src (ring data)
+           (Stream,
+            Tmp (0)'Address,
             AUDIO_S16SYS,
             unsigned (To_Copy),
             int (Vol));
       end;
    end Fill_Audio;
 
-   -- ── Push_Audio — called from decoder ──────────────────────────────────
-   -- Writes S16 interleaved stereo PCM bytes into the ring buffer.
-   -- If the buffer is full, we wait instead of dropping — dropping causes
-   -- the periodic gaps (scraping sound every ~2 seconds).
-   -- Because this runs on the main thread and Fill_Audio runs on SDL's
-   -- audio thread, we keep the logic simple: just overwrite oldest if full.
+   -- ── Push_Audio — called from decoder thread ────────────────────────────
+   -- Lock the audio device before touching any shared ring state.
+   -- On overflow: drop INCOMING data (skip the burst), NOT buffered data.
+   -- Dropping already-buffered audio causes audible clicks; dropping new
+   -- incoming data during a burst is inaudible.
    procedure Push_Audio (Data : System.Address; N_Bytes : Integer) is
       Src : array (0 .. N_Bytes - 1) of unsigned_char
           with Import, Address => Data;
       Free_Space : Integer;
+      To_Write   : Integer;
    begin
       if N_Bytes <= 0 or else Dev = Invalid_Device then return; end if;
+
+      SDL_LockAudioDevice (Dev);
 
       Free_Space := Ring_Size - Ring_Avail;
 
       if N_Bytes > Free_Space then
-         -- Buffer full: drop oldest data to make room.
-         -- This means we're producing audio faster than SDL consumes it —
-         -- the real fix is the larger ring buffer above.
-         declare
-            Drop : constant Integer := N_Bytes - Free_Space;
-         begin
-            Ring_Read  := (Ring_Read + Drop) mod Ring_Size;
-            Ring_Avail := Ring_Avail - Drop;
-         end;
+         -- Buffer nearly full: only write what fits, drop the rest.
+         -- This silently truncates the burst rather than corrupting
+         -- already-buffered audio that is about to be played.
+         To_Write := Free_Space;
+      else
+         To_Write := N_Bytes;
       end if;
 
-      for I in 0 .. N_Bytes - 1 loop
+      for I in 0 .. To_Write - 1 loop
          Ring (Ring_Write) := Src (I);
          Ring_Write := (Ring_Write + 1) mod Ring_Size;
       end loop;
-      Ring_Avail := Ring_Avail + N_Bytes;
+      Ring_Avail := Ring_Avail + To_Write;
+
+      SDL_UnlockAudioDevice (Dev);
    end Push_Audio;
+
+   -- ── Flush — discard all buffered audio (e.g. after seek) ─────────────
+   procedure Flush is
+   begin
+      if Dev = Invalid_Device then return; end if;
+      SDL_LockAudioDevice (Dev);
+      Ring_Read  := 0;
+      Ring_Write := 0;
+      Ring_Avail := 0;
+      SDL_UnlockAudioDevice (Dev);
+   end Flush;
 
    -- ── Init ─────────────────────────────────────────────────────────────
    procedure Init (Volume : Integer) is
@@ -125,7 +141,7 @@ package body Audio is
       Want.Freq      := 44_100;
       Want.Format    := AUDIO_S16SYS;
       Want.Channels  := 2;
-      Want.Samples   := 2_048;  -- smaller buffer = lower audio latency
+      Want.Samples   := 4_096;  -- larger SDL buffer reduces callback frequency
       Want.Callback  := Fill_Audio'Access;
       Want.User_Data := System.Null_Address;
 
@@ -134,14 +150,17 @@ package body Audio is
          Is_Capture      => 0,
          Desired         => Want,
          Obtained        => Got,
-         Allowed_Changes => SDL_AUDIO_ALLOW_FREQUENCY_CHANGE
-                            or SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
+         -- Refuse all SDL-initiated changes: we want exactly 44100 Hz
+         -- stereo S16. If SDL resamples silently, audio drifts over time.
+         Allowed_Changes => 0);
 
       if Dev = Invalid_Device then
          Put_Line ("[Audio] WARNING: No audio device. Silent mode.");
       else
          Put_Line ("[Audio] Device opened. Freq="
-                   & Integer'Image (Integer (Got.Freq)));
+                   & Integer'Image (Integer (Got.Freq))
+                   & " Ch=" & Integer'Image (Integer (Got.Channels))
+                   & " Samples=" & Integer'Image (Integer (Got.Samples)));
       end if;
    end Init;
 
