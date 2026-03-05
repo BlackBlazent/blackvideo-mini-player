@@ -60,4 +60,20 @@ package body SDL.Events is
       return SDL_PollEvent (E) = 1;
    end Poll;
 
+
+   -- ─── Mouse motion (SDL_MouseMotionEvent) ──────────────────────────────
+   -- Offsets: type@0 timestamp@4 windowID@8 which@12 state@16 x@20 y@24
+   function Mouse_X (E : SDL_Event) return int is (Read_S32 (E.Bytes, 20));
+   function Mouse_Y (E : SDL_Event) return int is (Read_S32 (E.Bytes, 24));
+
+   -- ─── Mouse button (SDL_MouseButtonEvent) ─────────────────────────────
+   -- SDL_MouseButtonEvent: type@0 timestamp@4 windowID@8 which@12 button@16 state@17 clicks@18 pad@19 x@20 y@24
+   function Mouse_Button (E : SDL_Event) return unsigned_char is (E.Bytes (16));
+   function Mouse_Btn_X  (E : SDL_Event) return int is (Read_S32 (E.Bytes, 20));
+   function Mouse_Btn_Y  (E : SDL_Event) return int is (Read_S32 (E.Bytes, 24));
+
+   -- ─── Mouse wheel (SDL_MouseWheelEvent) ────────────────────────────────
+   -- Offsets: type@0 timestamp@4 windowID@8 which@12 x@16 y@20
+   function Mouse_Wheel_Y (E : SDL_Event) return int is (Read_S32 (E.Bytes, 20));
+
 end SDL.Events;
