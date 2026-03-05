@@ -15,6 +15,7 @@
  */
 
 /* SDL2 headers.
+ *
  * Works with both flat layout (lib/include/SDL.h) and
  * subfolder layout (lib/include/SDL2/SDL.h).
  * build.bat passes -I lib/include and -I lib/include/SDL2
