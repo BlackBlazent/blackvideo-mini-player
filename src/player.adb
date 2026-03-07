@@ -1,16 +1,29 @@
 -- player.adb
--- BlackVideo Mini Player — Core Player  v2.2
+-- BlackVideo Mini Player — Core Player  v2.3
 --
--- All original keyboard controls preserved.
--- New: SDL2 UI overlay (seek bar, buttons, context menu), mouse events,
---      auto-hide bar (3 s idle), right-click context menu, subtitle slots.
+-- v2.3 changes:
+--   BUG FIX: After an Open_Dialog call (file picker), SDL queues pending
+--     MOUSEBUTTONDOWN events that fire after the dialog closes.  This caused
+--     the context menu to re-open and immediately fire CTX_SUB_NONE,
+--     resetting Sub_Active to -1 right after the user selected a track.
+--     Fix: record the SDL tick at which the ctx menu was last closed; ignore
+--     any MOUSEBUTTONDOWN that arrives within 250 ms of that moment.
+--
+--   NEW: Subtitle text rendering — SRT_Parser loads the .srt file and
+--     current cue text is pushed to the UI overlay every frame.
+--
+--   NEW: Whisper.cpp offline caption generation and translation, run as
+--     a background Windows job (player stays responsive while Whisper runs).
+--     Results auto-loaded into Track 1 when complete.
 
 with Ada.Text_IO;
 with Ada.Exceptions;
 with Ada.Strings.Unbounded;
+with Ada.Directories;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with System;
+with System.Storage_Elements;
 
 with SDL;
 with SDL.Video;
@@ -24,6 +37,8 @@ with Renderer;
 with Audio;
 with Utils;
 with UI_Overlay;
+with Whisper_Bridge;
+with SRT_Parser;
 
 package body Player is
 
@@ -31,34 +46,50 @@ package body Player is
    use Ada.Strings.Unbounded;
    use Interfaces.C;
    use System;
+   use System.Storage_Elements;
    use SDL.Events;
    use SDL.Events.Keyboards;
 
-   -- ── Player state ───────────────────────────────────────────────────────
+   -- ── Player state ────────────────────────────────────────────────────────
    State      : Player_State     := Stopped;
    Volume     : Integer          := 80;
    Fullscreen : Boolean          := False;
    Looping    : Boolean          := False;
    Muted      : Boolean          := False;
-   Speed_Idx  : UI_Overlay.Speed_Index := 1;  -- 1 = 1.0×
+   Speed_Idx  : UI_Overlay.Speed_Index := 1;
 
-   -- ── Subtitle state (up to 3 tracks) ───────────────────────────────────
+   -- ── Subtitle state (up to 3 tracks) ──────────────────────────────────
    Sub_Path   : array (0 .. 2) of Unbounded_String :=
      (others => To_Unbounded_String (""));
    Sub_Count  : Integer := 0;
    Sub_Active : Integer := -1;
+
+   -- Loaded SRT data for the active track
+   Active_SRT    : SRT_Parser.SRT_File;
+   Active_SRT_OK : Boolean := False;
+
+   -- ── Context menu guard: ignore clicks for 250 ms after close ─────────
+   Ctx_Close_Tick : unsigned := 0;
+   CTX_GUARD_MS   : constant unsigned := 250;
+
+   -- ── Whisper background job ─────────────────────────────────────────────
+   -- We launch whisper in a detached cmd.exe /c process and poll for the
+   -- output SRT file.  When it appears, we auto-load it.
+   Whisper_Running    : Boolean         := False;
+   Whisper_Out_SRT    : Unbounded_String := To_Unbounded_String ("");
+   Whisper_Video_Path : Unbounded_String := To_Unbounded_String ("");
 
    -- ── Auto-hide bar ─────────────────────────────────────────────────────
    Bar_Until   : unsigned := 0;
    Bar_Visible : Boolean  := True;
    Hide_MS     : constant unsigned := 3_000;
 
-   -- ── Accessors ─────────────────────────────────────────────────────────
+   -- ── Accessors ────────────────────────────────────────────────────────
    function Current_State  return Player_State is (State);
    function Current_Volume return Integer      is (Volume);
    function Is_Fullscreen  return Boolean      is (Fullscreen);
 
-   -- ── Forward declarations ──────────────────────────────────────────────
+   -- ── Forward declarations ─────────────────────────────────────────────
    procedure Handle_Key (Ev : SDL_Event; Win : SDL.Video.Window_Handle;
                          Quit : out Boolean);
    procedure Handle_Motion (Ev : SDL_Event);
@@ -69,15 +100,18 @@ package body Player is
    procedure Show_Bar;
    procedure Sync_Subs;
    procedure Toggle_Play_Pause;
+   procedure Load_Active_SRT;
+   procedure Check_Whisper_Done;
+   procedure Launch_Whisper (Video_Path : String; Translate : Boolean);
 
-   -- ── Show_Bar — reset auto-hide timer ──────────────────────────────────
+   -- ── Show_Bar ──────────────────────────────────────────────────────────
    procedure Show_Bar is
    begin
       Bar_Until   := SDL.Get_Ticks + Hide_MS;
       Bar_Visible := True;
    end Show_Bar;
 
-   -- ── Sync_Subs — push subtitle table to C overlay ──────────────────────
+   -- ── Sync_Subs — push subtitle table to C overlay ─────────────────────
    procedure Sync_Subs is
    begin
       UI_Overlay.Set_Subtitles
@@ -87,7 +121,137 @@ package body Player is
          Sub_Count, Sub_Active);
    end Sync_Subs;
 
-   -- ── Toggle_Play_Pause ─────────────────────────────────────────────────
+   -- ── Load_Active_SRT — parse the SRT for the active track ─────────────
+   procedure Load_Active_SRT is
+   begin
+      Active_SRT_OK := False;
+      Active_SRT    := (Cues => (others => (others => <>)), Count => 0);
+      UI_Overlay.Set_Sub_Text ("");
+
+      if Sub_Active < 0 or else Sub_Active >= Sub_Count then return; end if;
+      declare
+         Path : constant String := To_String (Sub_Path (Sub_Active));
+      begin
+         if Path'Length > 0 then
+            SRT_Parser.Load (Path, Active_SRT, Active_SRT_OK);
+            if not Active_SRT_OK then
+               Put_Line ("[Player] WARNING: could not parse SRT: " & Path);
+            end if;
+         end if;
+      end;
+   end Load_Active_SRT;
+
+   -- ── Check_Whisper_Done — poll for completed background job ───────────
+   procedure Check_Whisper_Done is
+   begin
+      if not Whisper_Running then return; end if;
+      declare
+         SRT_Path : constant String := To_String (Whisper_Out_SRT);
+      begin
+         if SRT_Path'Length > 0 and then
+            Ada.Directories.Exists (SRT_Path)
+         then
+            -- SRT appeared — load it into Track 1
+            Whisper_Running := False;
+            UI_Overlay.Set_Whisper_Status ("");
+            Sub_Path  (0) := To_Unbounded_String (SRT_Path);
+            Sub_Count     := Integer'Max (Sub_Count, 1);
+            Sub_Active    := 0;
+            Sync_Subs;
+            Load_Active_SRT;
+            Put_Line ("[Whisper] Auto-loaded: " & SRT_Path);
+         end if;
+      end;
+   end Check_Whisper_Done;
+
+   -- ── Launch_Whisper — start background transcription ──────────────────
+   procedure Launch_Whisper (Video_Path : String; Translate : Boolean) is
+      Whisper_Exe : constant String := Whisper_Bridge.Find_Whisper;
+      Model_Path  : constant String := Whisper_Bridge.Find_Model;
+   begin
+      if Whisper_Exe = "" then
+         Put_Line ("[Whisper] ERROR: whisper-cli.exe not found.");
+         Put_Line ("[Whisper]   Place whisper-cli.exe in build\ or");
+         Put_Line ("[Whisper]   set BLACKVIDEO_WHISPER_PATH env var.");
+         UI_Overlay.Set_Whisper_Status ("Whisper not found — see console");
+         return;
+      end if;
+
+      if Model_Path = "" then
+         Put_Line ("[Whisper] ERROR: model not found.");
+         Put_Line ("[Whisper]   Place ggml-base.bin in build\models\ or");
+         Put_Line ("[Whisper]   set BLACKVIDEO_WHISPER_MODEL env var.");
+         UI_Overlay.Set_Whisper_Status ("Model not found — see console");
+         return;
+      end if;
+
+      if Whisper_Running then
+         Put_Line ("[Whisper] Already running, please wait.");
+         return;
+      end if;
+
+      -- Derive output SRT path (beside the video)
+      declare
+         Out_SRT : constant String := Video_Path & ".srt";
+
+         -- Build the FFmpeg + whisper command as a batch that writes a
+         -- sentinel file when done. We run it in a hidden cmd.exe window.
+         Tmp_WAV     : constant String := Video_Path & ".tmp.wav";
+         Trans_Flag  : constant String :=
+           (if Translate then " --translate" else "");
+
+         -- The full command sequence:
+         --   1. ffmpeg extracts 16kHz mono WAV
+         --   2. whisper-cli transcribes → .srt  (whisper names it <base>.srt)
+         --   3. del temp wav
+         Batch_Cmd : constant String :=
+           "cmd.exe /c """ &
+           "ffmpeg -y -i """ & Video_Path & """ " &
+           "-ar 16000 -ac 1 -f wav """ & Tmp_WAV & """ 2>nul" &
+           " && " &
+           """" & Whisper_Exe & """ " &
+           "-m """ & Model_Path & """ " &
+           "-f """ & Tmp_WAV & """ " &
+           "--output-srt" & Trans_Flag & " " &
+           "-of """ & Video_Path & """ " &
+           "2>nul" &
+           " && del /q """ & Tmp_WAV & """ 2>nul" &
+           """";
+
+         function WinExec (Cmd : Interfaces.C.Strings.chars_ptr;
+                           Show : unsigned) return unsigned
+         with Import, Convention => C, External_Name => "WinExec";
+
+         CP  : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Batch_Cmd);
+         Ret : unsigned;
+      begin
+         Ret := WinExec (CP, 0);   -- 0 = SW_HIDE
+         Interfaces.C.Strings.Free (CP);
+
+         if Ret < 32 then
+            Put_Line ("[Whisper] ERROR: WinExec failed (code" &
+                      unsigned'Image (Ret) & ").");
+            return;
+         end if;
+
+         Whisper_Running    := True;
+         Whisper_Out_SRT    := To_Unbounded_String (Out_SRT);
+         Whisper_Video_Path := To_Unbounded_String (Video_Path);
+
+         if Translate then
+            UI_Overlay.Set_Whisper_Status ("Whisper: translating...");
+            Put_Line ("[Whisper] Launched translation job.");
+         else
+            UI_Overlay.Set_Whisper_Status ("Whisper: generating captions...");
+            Put_Line ("[Whisper] Launched transcription job.");
+         end if;
+         Put_Line ("[Whisper] Output: " & Out_SRT);
+         Put_Line ("[Whisper] Player stays responsive while Whisper runs.");
+      end;
+   end Launch_Whisper;
+
+   -- ── Toggle_Play_Pause ────────────────────────────────────────────────
    procedure Toggle_Play_Pause is
    begin
       if State = Playing then
@@ -102,7 +266,6 @@ package body Player is
    end Toggle_Play_Pause;
 
    -- ── Open file dialog (Windows — PowerShell) ───────────────────────────
-   -- Falls back to empty string on failure or non-Windows.
    function Open_Dialog (Title : String; Filter_Ext : String) return String is
       pragma Unreferenced (Title);
       Cmd : constant String :=
@@ -138,7 +301,6 @@ package body Player is
       Dummy_Addr := fgets (Buf (1)'Address, 1023, Fp);
       Dummy_Int  := pclose (Fp);
       pragma Unreferenced (Dummy_Addr, Dummy_Int);
-      -- Strip trailing CR/LF/NUL
       for I in Buf'Range loop
          if Buf (I) = ASCII.LF or else Buf (I) = ASCII.CR
             or else Character'Pos (Buf (I)) = 0
@@ -150,9 +312,10 @@ package body Player is
       return Buf;
    end Open_Dialog;
 
-   -- ── Find a system font for the overlay ────────────────────────────────
+   -- ── Find a system font ─────────────────────────────────────────────────
    function Find_Font return String is
-      type Font_List is array (Positive range <>) of access constant String;
+      type String_Ptr is access constant String;
+      type Font_List  is array (Positive range <>) of String_Ptr;
       Fonts : constant Font_List :=
         (new String'("C:\Windows\Fonts\segoeui.ttf"),
          new String'("C:\Windows\Fonts\arial.ttf"),
@@ -172,9 +335,9 @@ package body Player is
    begin
       for F of Fonts loop
          declare
-            Cp : chars_ptr     := New_String (F.all);
-            Cm : chars_ptr     := New_String ("r");
-            Fh : System.Address := fopen (Cp, Cm);
+            Cp : chars_ptr      := New_String (F.all);
+            Cm : chars_ptr      := New_String ("r");
+            Fh : constant System.Address := fopen (Cp, Cm);
             D  : int;
          begin
             Free (Cp); Free (Cm);
@@ -188,7 +351,6 @@ package body Player is
       return "";
    end Find_Font;
 
-   -- ── SDL_GetMouseState wrapper ──────────────────────────────────────────
    function SDL_GetMouseState (X, Y : System.Address) return unsigned
    with Import, Convention => C, External_Name => "SDL_GetMouseState";
 
@@ -213,6 +375,8 @@ package body Player is
 
       Put_Line ("[Player] Opening: " & Video_File);
       Video_Decoder.Open (Video_File, Vid_W, Vid_H, Frame_Delay_MS);
+      -- Store path so Whisper knows which file to transcribe
+      Whisper_Video_Path := To_Unbounded_String (Video_File);
 
       SDL.Video.Windows.Create
         (Win,
@@ -231,7 +395,6 @@ package body Player is
       Renderer.Init_Texture (Rend, Tex, Vid_W, Vid_H);
       Audio.Init (Volume);
 
-      -- Initialise overlay
       UI_Overlay.Init (Find_Font);
       UI_Overlay.Set_Window_Size (Vid_W, Vid_H);
       Sync_Subs;
@@ -245,18 +408,21 @@ package body Player is
       Put_Line ("[Player]   Keys: SPACE=pause  LEFT/RIGHT=seek  UP/DOWN=vol");
       Put_Line ("[Player]         M=mute  L=loop  F=fullscreen  Q/ESC=quit");
       Put_Line ("[Player]   Mouse: click=pause/play  drag-bar=seek  right-click=menu");
+      Put_Line ("[Player]   Whisper: right-click → Generate Captions or Translate");
 
-      -- ── Main loop ────────────────────────────────────────────────────────
+      -- ── Main loop ──────────────────────────────────────────────────────
       while not Quit loop
 
          Frame_Start := SDL.Get_Ticks;
 
-         -- Auto-hide bar when mouse idle
          if SDL.Get_Ticks > Bar_Until and then not UI_Overlay.Is_Seeking then
             Bar_Visible := False;
          end if;
 
-         -- ── Event pump ────────────────────────────────────────────────────
+         -- Poll for completed Whisper background job
+         Check_Whisper_Done;
+
+         -- ── Event pump ────────────────────────────────────────────────
          while SDL.Events.Poll (Ev) loop
             declare
                T : constant unsigned := SDL.Events.Event_Type (Ev);
@@ -282,7 +448,7 @@ package body Player is
             end;
          end loop;
 
-         -- While dragging scrubber, seek to mouse x continuously
+         -- Scrubber drag
          if UI_Overlay.Is_Seeking then
             declare
                Mx, My : aliased int := 0;
@@ -296,7 +462,7 @@ package body Player is
             end;
          end if;
 
-         -- ── Decode + display ──────────────────────────────────────────────
+         -- ── Decode + display ──────────────────────────────────────────
          if State = Playing then
             declare
                Frame : Video_Decoder.RGB_Frame;
@@ -318,10 +484,21 @@ package body Player is
             end;
          end if;
 
-         -- Draw video (no Present yet)
+         -- ── Update subtitle cue text ──────────────────────────────────
+         if Active_SRT_OK and then Sub_Active >= 0 then
+            declare
+               Pos : constant Float := Video_Decoder.Get_Position;
+               Cue : constant String :=
+                 SRT_Parser.Current_Text (Active_SRT, Pos);
+            begin
+               UI_Overlay.Set_Sub_Text (Cue);
+            end;
+         end if;
+
+         -- Draw video
          Renderer.Draw (Rend, Tex, Vid_W, Vid_H);
 
-         -- Draw UI overlay on top
+         -- Draw UI overlay
          UI_Overlay.Draw
            (Renderer   => Renderer.To_Address (Rend),
             Position   => Video_Decoder.Get_Position,
@@ -334,10 +511,8 @@ package body Player is
             Speed_Idx  => Speed_Idx,
             Visible    => Bar_Visible);
 
-         -- Present combined frame
          Renderer.Present (Rend);
 
-         -- Frame pacing — sleep only the budget remainder
          Elapsed := SDL.Get_Ticks - Frame_Start;
          if Elapsed < unsigned (Frame_Delay_MS) then
             Sleep_MS := unsigned (Frame_Delay_MS) - Elapsed;
@@ -367,14 +542,12 @@ package body Player is
    --  Event handlers
    -- ══════════════════════════════════════════════════════════════════════
 
-   -- ── Mouse motion: show bar + update hover ─────────────────────────────
    procedure Handle_Motion (Ev : SDL_Event) is
       X : constant Integer := Integer (SDL.Events.Mouse_X (Ev));
       Y : constant Integer := Integer (SDL.Events.Mouse_Y (Ev));
    begin
       Show_Bar;
       UI_Overlay.Set_Hover_Btn (UI_Overlay.Hit_Button (X, Y));
-      -- Update context menu hover while open
       if UI_Overlay.Ctx_Open then
          declare
             Ign : constant int := UI_Overlay.Hit_Ctx (X, Y);
@@ -384,14 +557,12 @@ package body Player is
       end if;
    end Handle_Motion;
 
-   -- ── Mouse button up: release scrubber ─────────────────────────────────
    procedure Handle_Button_Up (Ev : SDL_Event) is
       pragma Unreferenced (Ev);
    begin
       UI_Overlay.Set_Seeking (False);
    end Handle_Button_Up;
 
-   -- ── Mouse wheel: volume ───────────────────────────────────────────────
    procedure Handle_Wheel (Ev : SDL_Event) is
       Wy : constant int := SDL.Events.Mouse_Wheel_Y (Ev);
    begin
@@ -401,7 +572,7 @@ package body Player is
       Put_Line ("[Player] Volume =" & Integer'Image (Volume));
    end Handle_Wheel;
 
-   -- ── Mouse button down ─────────────────────────────────────────────────
+   -- ── Handle_Button_Down ───────────────────────────────────────────────
    procedure Handle_Button_Down
      (Ev   : SDL_Event;
       Win  : SDL.Video.Window_Handle;
@@ -414,10 +585,11 @@ package body Player is
       Quit := False;
       Show_Bar;
 
-      -- ── Right-click: open/close context menu ──────────────────────────
+      -- ── Right-click: open/close context menu ────────────────────────
       if Btn = SDL_BUTTON_RIGHT then
          if UI_Overlay.Ctx_Open then
             UI_Overlay.Close_Ctx;
+            Ctx_Close_Tick := SDL.Get_Ticks;
          else
             UI_Overlay.Open_Ctx (X, Y);
          end if;
@@ -426,12 +598,21 @@ package body Player is
 
       if Btn /= SDL_BUTTON_LEFT then return; end if;
 
-      -- ── Context menu click ────────────────────────────────────────────
+      -- ── GUARD: ignore clicks arriving within 250ms of ctx menu close ─
+      -- This absorbs queued MOUSEBUTTONDOWN events that SDL buffers while
+      -- the file-dialog modal is open (Open_Dialog blocks via popen).
+      if SDL.Get_Ticks - Ctx_Close_Tick < CTX_GUARD_MS then
+         return;
+      end if;
+
+      -- ── Context menu left-click ───────────────────────────────────────
       if UI_Overlay.Ctx_Open then
          declare
             Item : constant int := UI_Overlay.Hit_Ctx (X, Y);
          begin
             UI_Overlay.Close_Ctx;
+            Ctx_Close_Tick := SDL.Get_Ticks;
+
             if Item = UI_Overlay.CTX_OPEN_FILE then
                declare
                   Path : constant String :=
@@ -440,14 +621,16 @@ package body Player is
                begin
                   if Path'Length > 0 then
                      Put_Line ("[Player] Open: " & Path);
-                     -- Hot-swap not yet implemented — print guidance.
-                     Put_Line ("[Player] Quit this instance and run:");
+                     Put_Line ("[Player] Quit and run:");
                      Put_Line ("[Player]   blackvideo-player.exe """ & Path & """");
                   end if;
                end;
+               Ctx_Close_Tick := SDL.Get_Ticks;
 
             elsif Item = UI_Overlay.CTX_SUB_NONE then
-               Sub_Active := -1;
+               Sub_Active    := -1;
+               Active_SRT_OK := False;
+               UI_Overlay.Set_Sub_Text ("");
                Sync_Subs;
                Put_Line ("[Player] Subtitle: off");
 
@@ -459,11 +642,13 @@ package body Player is
                     Integer (Item) - Integer (UI_Overlay.CTX_SUB_1);
                begin
                   if Idx < Sub_Count then
+                     -- Track already loaded — just activate it
                      Sub_Active := Idx;
                      Sync_Subs;
-                     Put_Line ("[Player] Subtitle track" & Integer'Image (Idx+1));
+                     Load_Active_SRT;
+                     Put_Line ("[Player] Subtitle track" & Integer'Image (Idx + 1));
                   else
-                     -- Slot empty — ask user to pick a file
+                     -- Slot empty — ask user to pick an SRT
                      declare
                         Path : constant String :=
                           Open_Dialog ("Load Subtitle",
@@ -474,17 +659,29 @@ package body Player is
                            if Idx >= Sub_Count then Sub_Count := Idx + 1; end if;
                            Sub_Active := Idx;
                            Sync_Subs;
+                           Load_Active_SRT;
                            Put_Line ("[Player] Subtitle loaded: " & Path);
                         end if;
                      end;
+                     -- Reset guard after file dialog
+                     Ctx_Close_Tick := SDL.Get_Ticks;
                   end if;
                end;
+
+            elsif Item = UI_Overlay.CTX_WHISPER_GEN then
+               Launch_Whisper (To_String (Whisper_Video_Path),
+                               Translate => False);
+
+            elsif Item = UI_Overlay.CTX_WHISPER_TRANS then
+               Launch_Whisper (To_String (Whisper_Video_Path),
+                               Translate => True);
+
             end if;
          end;
          return;
       end if;
 
-      -- ── Seek bar ──────────────────────────────────────────────────────
+      -- ── Seek bar ─────────────────────────────────────────────────────
       if UI_Overlay.In_Bar (X, Y) and then UI_Overlay.Hit_Seek (X, Y) then
          UI_Overlay.Set_Seeking (True);
          Video_Decoder.Seek_To
@@ -493,7 +690,7 @@ package body Player is
          return;
       end if;
 
-      -- ── Control buttons ───────────────────────────────────────────────
+      -- ── Control buttons ──────────────────────────────────────────────
       if UI_Overlay.In_Bar (X, Y) then
          declare
             B : constant int := UI_Overlay.Hit_Button (X, Y);
@@ -526,7 +723,7 @@ package body Player is
                               ((int (Speed_Idx) + 1) mod 4);
                Put_Line ("[Player] Speed="
                          & Float'Image (UI_Overlay.Speed_Values (Speed_Idx))
-                         & "x (display only — codec speed requires v1.2)");
+                         & "x");
 
             elsif B = UI_Overlay.BTN_FULLSCREEN then
                Fullscreen := not Fullscreen;
@@ -540,11 +737,11 @@ package body Player is
          return;
       end if;
 
-      -- ── Click on video area: toggle play/pause ─────────────────────────
+      -- ── Click on video: toggle play/pause ────────────────────────────
       Toggle_Play_Pause;
    end Handle_Button_Down;
 
-   -- ── Keyboard — ALL original shortcuts preserved ────────────────────────
+   -- ── Handle_Key ───────────────────────────────────────────────────────
    procedure Handle_Key
      (Ev   : SDL_Event;
       Win  : SDL.Video.Window_Handle;
