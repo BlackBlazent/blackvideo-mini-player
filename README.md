@@ -1,12 +1,12 @@
 ![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBlackBlazent%2Fblackvideo-mini-player&label=BlackVideo%20Mini%20Player%3AVisitor&labelColor=%23000000&countColor=%2337d67a&style=flat&labelStyle=lower)
 
-> # 2.2.0
+> # 2.3.0
 
-New update **2.2.0** is here as a stable release. This includes fully working playback controls, a context menu, audio stability fixes for long videos, and a corrected SDL2 event struct layout.
+New update **2.3.0** is here. This release adds **offline AI caption generation and translation** via [whisper.cpp](https://github.com/ggerganov/whisper.cpp), real subtitle text rendering on-screen, a fixed subtitle track state bug, and a production-ready `.env` system for path overrides.
 <br/>
 
-- **Download** it [here](https://sourceforge.net/projects/blackvideo-mini-player/files/blackvideo-mini-player-v2.2.0.zip/download) on SourceForge or in the [release](https://github.com/BlackBlazent/blackvideo-mini-player/releases/tag/v2.2.0) page.
-- [**Change logs**](https://github.com/BlackBlazent/blackvideo-mini-player/compare/1.1.0...v2.2.0)
+- **Download** it [here](https://sourceforge.net/projects/blackvideo-mini-player/files/latest/download) on SourceForge or in the [release](https://github.com/BlackBlazent/blackvideo-mini-player/releases/tag/v2.3.0) page.
+- [**Change logs**](https://github.com/BlackBlazent/blackvideo-mini-player/compare/v2.2.0...v2.3.0)
 
 <img src="./public/screenshot.png" alt="Screenshot"/>
 
@@ -16,7 +16,7 @@ Lightweight cross-platform video player (Ada + SDL2 + FFmpeg). Support player fo
 
 <p align="center">
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.2.0-37d67a?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-2.3.0-37d67a?style=for-the-badge" />
   <img src="https://img.shields.io/badge/status-in%20active%20development-orange?style=for-the-badge" />
   <img src="https://img.shields.io/badge/license-MIT-black?style=for-the-badge" />
 </p>
@@ -24,6 +24,7 @@ Lightweight cross-platform video player (Ada + SDL2 + FFmpeg). Support player fo
   <img src="https://img.shields.io/badge/Ada-Language-0A84FF?style=for-the-badge&logo=ada&logoColor=white" />
   <img src="https://img.shields.io/badge/SDL2-Rendering-7B42BC?style=for-the-badge" />
   <img src="https://img.shields.io/badge/FFmpeg-Decoding-D90429?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Whisper.cpp-Captions-1a73e8?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Alire-Package-009688?style=for-the-badge" />
   <img src="https://img.shields.io/badge/GNAT-Compiler-FFB703?style=for-the-badge" />
   <img src="https://img.shields.io/badge/gprbuild-Build%20System-6c757d?style=for-the-badge" />
@@ -37,22 +38,29 @@ Lightweight cross-platform video player (Ada + SDL2 + FFmpeg). Support player fo
 
 <img src="./public/new_screenshot.png" alt="Screenshot"/>
 
+<br/>
+
+<img src="./public/new_screenshot_1.png" alt="Screenshot"/>
+
 ## File Structure
 
 ```
 blackvideo-mini-player/
 │
 ├── src/
-│   ├── main.adb                  ← Entry point
+│   ├── main.adb                  ← Entry point + .env loader
 │   ├── player.ads / .adb         ← Core orchestrator + event loop
 │   ├── video_decoder.ads / .adb  ← FFmpeg decode pipeline
 │   ├── renderer.ads / .adb       ← SDL2 texture rendering (letterbox)
 │   ├── audio.ads / .adb          ← SDL2 audio callback + volume/mute/flush
 │   ├── ui_overlay.ads / .adb     ← Ada wrapper for the C UI overlay
+│   ├── srt_parser.ads / .adb     ← SRT subtitle file parser
+│   ├── whisper_bridge.ads / .adb ← Whisper.cpp offline caption bridge
 │   └── utils.ads / .adb          ← Base_Name, Format_Time
 │
 ├── csrc/                         ← C sources compiled separately (not scanned by gprbuild)
-│   └── ui_overlay.c              ← SDL2-drawn control bar (buttons, seek bar, context menu)
+│   └── ui_overlay.c              ← SDL2-drawn control bar (buttons, seek bar, context menu,
+│                                    subtitle overlay, Whisper status banner)
 │
 ├── bindings/
 │   ├── ffmpeg/
@@ -91,6 +99,8 @@ blackvideo-mini-player/
 │   ├── build.bat     ← Windows build (handles spaces in path, auto-finds gprbuild)
 │   └── build.sh      ← Linux/macOS build
 │
+├── .env.example            ← Template for dev path overrides (rename to .env)
+├── WHISPER_SETUP.md        ← Full Whisper setup and model upgrade guide
 └── blackvideo_player.gpr   ← GNAT project file
 ```
 
@@ -124,7 +134,51 @@ blackvideo-mini-player/
 | ⛶ Fullscreen | Toggle fullscreen |
 | ⋮ Menu | Open context menu |
 
-> Right-click anywhere on the video to open the context menu (Open File, Subtitle tracks).
+> Right-click anywhere on the video to open the context menu.
+
+---
+
+## Subtitles
+
+### Loading a subtitle file manually
+
+Right-click → **Track 1 / 2 / 3: (load file)** → pick an `.srt`, `.ass`, `.ssa`, or `.vtt` file.
+
+Once loaded, the track label in the context menu updates to the filename and a red dot marks the active track. The **Subtitle: Off** label also updates to **Subtitle: Track N** so you can always see what is active. Click it to turn subtitles off.
+
+### Generating captions with Whisper (offline)
+
+Right-click → **Generate Captions (Whisper)**
+
+BlackVideo uses [whisper.cpp](https://github.com/ggerganov/whisper.cpp) to transcribe speech **entirely offline** — no internet connection, no API key required. It extracts a 16 kHz mono WAV from the video using FFmpeg, runs `whisper-cli.exe` in the background, and auto-loads the resulting `.srt` into **Track 1** when done. The player stays fully responsive while Whisper is running, and a status banner is shown in the control bar.
+
+### Translating subtitles to English
+
+Right-click → **Translate to English (Whisper)**
+
+Whisper's built-in `--translate` flag transcribes the audio and outputs **English subtitles** regardless of the spoken language. This is useful for non-English films where you want a quick English SRT without any external service or internet connection.
+
+> **Translation target language:** Currently, translation outputs **English only**. Whisper.cpp's `--translate` flag always targets English as the fixed output language — it does not yet support translating to other languages such as Spanish, Japanese, or Filipino. Support for **multiple translation target languages** is planned for a future version.
+
+### Whisper setup (quick reference)
+
+Place these files in `build\` beside `blackvideo-player.exe`:
+
+```
+build\
+├── blackvideo-player.exe
+├── whisper-cli.exe        ← from whisper-bin-x64.zip
+├── whisper.dll
+├── ggml.dll
+├── ggml-base.dll
+├── ggml-cpu.dll
+└── models\
+    └── ggml-base.bin      ← downloaded model file
+```
+
+`ffmpeg.exe` must also be on your `PATH` (or placed in `build\`) for audio extraction.
+
+See **[WHISPER_SETUP.md](./WHISPER_SETUP.md)** for the full guide including model upgrades, `.env` overrides, and troubleshooting.
 
 ---
 
@@ -142,7 +196,7 @@ blackvideo-mini-player/
 4. Download [FFmpeg shared builds](https://github.com/BtbN/FFmpeg-Builds/releases) (win64-lgpl)
 5. Copy headers and `.a` import libraries into `lib/` — see [Required Files](#required-files) below.
 
-> [**Download**](https://www.mediafire.com/file/at0tyazvbyqfc0l/prerequisites-setup.zip/file) this setup: `lib/` and `build/` (Windows) ✨ 
+> [**Download**](https://www.mediafire.com/file/nirdk9z1czua23s/prerequisites-setup.zip/file) this setup: `lib/` and `build/` (Windows) ✨
 
 #### Build
 ```bat
@@ -283,6 +337,15 @@ fn open_video(path: String) {
 
 > **Important:** Use `SDL2_ttf-devel-2.0.12-VC` instead of `SDL2_ttf-devel-2.24.0-mingw`. The 2.0.12 VC build's `SDL2_ttf.dll` requires `libfreetype-6.dll` and `zlib1.dll` — include both alongside `SDL2_ttf.dll` in `build\`.
 
+**Optional — Whisper DLLs** (only needed for caption generation):
+
+| DLL | Source |
+|-----|--------|
+| `whisper.dll` | whisper-bin-x64.zip |
+| `ggml.dll` | whisper-bin-x64.zip |
+| `ggml-base.dll` | whisper-bin-x64.zip |
+| `ggml-cpu.dll` | whisper-bin-x64.zip |
+
 ### FFmpeg Headers — `lib/include/`
 
 **`lib/include/`**
@@ -329,6 +392,12 @@ GNAT maps Ada package `Foo.Bar.Baz` to file `foo-bar-baz.ads`. You cannot embed 
 
 **Audio thread safety:**
 `SDL_LockAudioDevice` / `SDL_UnlockAudioDevice` wrap all writes to the ring buffer in `Push_Audio`. Without this, torn reads between the SDL audio callback thread and the main decode thread can corrupt ring state after extended playback.
+
+**Whisper integration (no whisper.h needed):**
+`whisper_bridge.adb` launches `whisper-cli.exe` as a detached `WinExec` process — zero build-time dependency on whisper headers or libraries. The player polls for the output `.srt` file each frame and auto-loads it when it appears, so playback never freezes while Whisper runs. Models are hot-swappable: replace `ggml-base.bin` with any larger model and the next caption job uses it automatically.
+
+**`.env` file (dev mode only):**
+`main.adb` loads a `.env` file from beside the executable at startup using `SetEnvironmentVariableA`. In production releases the file is simply absent and the player silently skips it. This lets developers override `BLACKVIDEO_WHISPER_PATH` and `BLACKVIDEO_WHISPER_MODEL` without modifying the build.
 
 ---
 
