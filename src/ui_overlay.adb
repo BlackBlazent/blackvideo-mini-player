@@ -1,15 +1,13 @@
 -- ui_overlay.adb
--- BlackVideo Mini Player — UI Overlay (Ada body)
--- Bridges to ui_overlay.c via C imports.
+-- BlackVideo Mini Player — UI Overlay (Ada body)  v2.3
 
 with Interfaces.C.Strings;
 
 package body UI_Overlay is
 
-   use Interfaces.C;
    use Interfaces.C.Strings;
 
-   -- ── Raw C imports ──────────────────────────────────────────────────────
+   -- ── Raw C imports ───────────────────────────────────────────────────────
 
    function  C_Init (Path : chars_ptr) return int
    with Import, Convention => C, External_Name => "bv_ui_init";
@@ -69,7 +67,13 @@ package body UI_Overlay is
    procedure C_Set_Subs   (P0, P1, P2 : chars_ptr; Count, Active : int)
    with Import, Convention => C, External_Name => "bv_ui_set_subtitles";
 
-   -- ── Ada wrappers ───────────────────────────────────────────────────────
+   procedure C_Set_Sub_Text (Text : chars_ptr)
+   with Import, Convention => C, External_Name => "bv_ui_set_sub_text";
+
+   procedure C_Set_Whisper_Status (Status : chars_ptr)
+   with Import, Convention => C, External_Name => "bv_ui_set_whisper_status";
+
+   -- ── Ada wrappers ────────────────────────────────────────────────────────
 
    procedure Init (Font_Path : String) is
       CP : chars_ptr := New_String (Font_Path);
@@ -125,13 +129,13 @@ package body UI_Overlay is
    function Hit_Ctx (X, Y : Integer) return int is
      (C_Hit_Ctx (int (X), int (Y)));
 
-   procedure Set_Hover_Btn (Btn : int)  is begin C_Set_Hover (Btn);          end;
-   procedure Set_Seeking   (S : Boolean) is begin C_Set_Seeking (if S then 1 else 0); end;
-   function  Is_Seeking    return Boolean is (C_Is_Seeking /= 0);
+   procedure Set_Hover_Btn (Btn : int)   is begin C_Set_Hover (Btn); end;
+   procedure Set_Seeking (S : Boolean)   is begin C_Set_Seeking (if S then 1 else 0); end;
+   function  Is_Seeking  return Boolean  is (C_Is_Seeking /= 0);
 
-   procedure Open_Ctx (X, Y : Integer) is begin C_Open_Ctx (int (X), int (Y)); end;
-   procedure Close_Ctx                 is begin C_Close_Ctx;                    end;
-   function  Ctx_Open return Boolean   is (C_Ctx_Open /= 0);
+   procedure Open_Ctx (X, Y : Integer)  is begin C_Open_Ctx (int (X), int (Y)); end;
+   procedure Close_Ctx                  is begin C_Close_Ctx; end;
+   function  Ctx_Open  return Boolean   is (C_Ctx_Open /= 0);
 
    procedure Set_Subtitles
      (Path0, Path1, Path2 : String;
@@ -145,5 +149,19 @@ package body UI_Overlay is
       C_Set_Subs (CP0, CP1, CP2, int (Count), int (Active));
       Free (CP0); Free (CP1); Free (CP2);
    end Set_Subtitles;
+
+   procedure Set_Sub_Text (Text : String) is
+      CP : chars_ptr := New_String (Text);
+   begin
+      C_Set_Sub_Text (CP);
+      Free (CP);
+   end Set_Sub_Text;
+
+   procedure Set_Whisper_Status (Status : String) is
+      CP : chars_ptr := New_String (Status);
+   begin
+      C_Set_Whisper_Status (CP);
+      Free (CP);
+   end Set_Whisper_Status;
 
 end UI_Overlay;
