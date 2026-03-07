@@ -1,8 +1,6 @@
 -- ui_overlay.ads
--- BlackVideo Mini Player — UI Overlay (Ada spec)
+-- BlackVideo Mini Player — UI Overlay (Ada spec)  v2.3
 -- Thin wrapper over ui_overlay.c.
--- C layer: pure drawing + hit-testing.
--- Ada layer: owns all state, calls C to draw and to test hits.
 
 with Interfaces.C;
 with System;
@@ -11,7 +9,7 @@ package UI_Overlay is
 
    use Interfaces.C;
 
-   -- ── Button indices (must match #define in ui_overlay.c) ───────────────
+   -- ── Button indices ─────────────────────────────────────────────────────
    BTN_PREV       : constant int := 0;
    BTN_PLAY_PAUSE : constant int := 1;
    BTN_NEXT       : constant int := 2;
@@ -21,24 +19,26 @@ package UI_Overlay is
    BTN_FULLSCREEN : constant int := 6;
    BTN_MENU       : constant int := 7;
 
-   -- ── Context menu item indices ─────────────────────────────────────────
-   CTX_OPEN_FILE : constant int := 0;
-   CTX_SUB_NONE  : constant int := 1;
-   CTX_SUB_1     : constant int := 2;
-   CTX_SUB_2     : constant int := 3;
-   CTX_SUB_3     : constant int := 4;
+   -- ── Context menu item indices ──────────────────────────────────────────
+   CTX_OPEN_FILE     : constant int := 0;
+   CTX_SUB_NONE      : constant int := 1;
+   CTX_SUB_1         : constant int := 2;
+   CTX_SUB_2         : constant int := 3;
+   CTX_SUB_3         : constant int := 4;
+   CTX_WHISPER_GEN   : constant int := 5;  -- Generate captions
+   CTX_WHISPER_TRANS : constant int := 6;  -- Translate to English
 
-   -- ── Speed table ───────────────────────────────────────────────────────
+   -- ── Speed table ─────────────────────────────────────────────────────────
    type Speed_Index is new int range 0 .. 3;
    Speed_Values : constant array (Speed_Index) of Float :=
      (0 => 0.5, 1 => 1.0, 2 => 1.5, 3 => 2.0);
 
-   -- ── Lifecycle ─────────────────────────────────────────────────────────
+   -- ── Lifecycle ───────────────────────────────────────────────────────────
    procedure Init (Font_Path : String);
    procedure Quit;
    procedure Set_Window_Size (W, H : Integer);
 
-   -- ── Draw (call after Renderer.Draw, before Renderer.Present) ─────────
+   -- ── Draw ────────────────────────────────────────────────────────────────
    procedure Draw
      (Renderer   : System.Address;
       Position   : Float;
@@ -51,27 +51,33 @@ package UI_Overlay is
       Speed_Idx  : Speed_Index;
       Visible    : Boolean);
 
-   -- ── Hit-testing ───────────────────────────────────────────────────────
+   -- ── Hit-testing ─────────────────────────────────────────────────────────
    function Hit_Seek    (X, Y : Integer) return Boolean;
    function Seek_Frac   (X   : Integer) return Float;
-   function Hit_Button  (X, Y : Integer) return int;   -- -1 if none
+   function Hit_Button  (X, Y : Integer) return int;
    function In_Bar      (X, Y : Integer) return Boolean;
-   function Hit_Ctx     (X, Y : Integer) return int;   -- -1 if none
+   function Hit_Ctx     (X, Y : Integer) return int;
 
-   -- ── Interaction state ─────────────────────────────────────────────────
+   -- ── Interaction state ───────────────────────────────────────────────────
    procedure Set_Hover_Btn (Btn : int);
    procedure Set_Seeking   (S   : Boolean);
    function  Is_Seeking    return Boolean;
 
-   -- ── Context menu ──────────────────────────────────────────────────────
+   -- ── Context menu ────────────────────────────────────────────────────────
    procedure Open_Ctx  (X, Y : Integer);
    procedure Close_Ctx;
    function  Ctx_Open  return Boolean;
 
-   -- ── Subtitles (up to 3) ───────────────────────────────────────────────
+   -- ── Subtitles (up to 3 tracks) ──────────────────────────────────────────
    procedure Set_Subtitles
      (Path0, Path1, Path2 : String;
       Count               : Integer;
       Active              : Integer);
+
+   -- ── Subtitle cue text (current displayed line) ──────────────────────────
+   procedure Set_Sub_Text (Text : String);
+
+   -- ── Whisper status banner ────────────────────────────────────────────────
+   procedure Set_Whisper_Status (Status : String);
 
 end UI_Overlay;
