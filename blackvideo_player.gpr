@@ -1,4 +1,4 @@
--- blackvideo_player.gpr
+-- blackvideo_player.gpr  v2.3
 -- Pure Ada project. C files compiled separately in build.bat.
 -- ui_overlay.c lives in csrc/ (not src/) so gprbuild ignores it.
 -- The C .o files are passed directly to the linker.
@@ -30,7 +30,6 @@ project BlackVideo_Player is
    -- ── Linker ────────────────────────────────────────────────────────────
    -- ffmpeg_helpers.o  — compiled from src/ffmpeg_helpers.c  by build.bat
    -- ui_overlay_c.o    — compiled from csrc/ui_overlay.c     by build.bat
-   --                     Named _c.o to avoid collision with Ada ui_overlay.o
    -- resources/blackvideo.o — Windows icon/manifest (windres)
    package Linker is
       case OS is
