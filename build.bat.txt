@@ -1,0 +1,1 @@
+# Copy the file from script/build.bat to root path and run it to build the project.
