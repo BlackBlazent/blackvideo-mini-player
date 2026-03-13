@@ -1,18 +1,7 @@
 -- main.adb
--- BlackVideo Mini Player  v2.3
--- Entry point. Loads .env file (dev only), then runs the player.
---
--- .env support:
---   In development, a .env file beside the exe can set:
---     BLACKVIDEO_WHISPER_PATH=C:\path\to\whisper-cli.exe
---     BLACKVIDEO_WHISPER_MODEL=C:\path\to\ggml-base.bin
---   In a production release, the .env file is simply absent — the player
---   resolves those paths automatically from build\ without needing it.
---
--- Production build:
---   Build normally with build.bat. No .env file required in the release
---   package. whisper-cli.exe + ggml DLLs + model go in build\ beside the
---   player exe. The player auto-discovers them via Find_Whisper / Find_Model.
+-- BlackVideo Mini Player  v2.4
+-- Entry point. Loads .env (dev only), then launches the player.
+-- v2.4: no argument guard removed — passes "" so player shows welcome screen.
 
 with Ada.Command_Line;
 with Ada.Strings.Unbounded;
@@ -33,21 +22,16 @@ procedure Main is
    use System.Storage_Elements;
 
    -- ── Load .env file ─────────────────────────────────────────────────────
-   -- Sets environment variables from KEY=VALUE lines.
-   -- Silently skipped when the file does not exist (production mode).
    procedure Load_Env (Path : String) is
-
       function SetEnvironmentVariableA
         (Name, Value : Interfaces.C.Strings.chars_ptr) return int
       with Import, Convention => C,
            External_Name => "SetEnvironmentVariableA";
-
       File   : File_Type;
       Buffer : String (1 .. 2048);
       Last   : Natural;
    begin
       if not Ada.Directories.Exists (Path) then return; end if;
-
       Open (File, In_File, Path);
       while not End_Of_File (File) loop
          Get_Line (File, Buffer, Last);
@@ -55,17 +39,14 @@ procedure Main is
             Line : constant String := Buffer (1 .. Last);
             Eq   : Natural := 0;
          begin
-            -- Skip blank lines and comments
             if Line'Length > 0 and then Line (Line'First) /= '#' then
                for I in Line'Range loop
                   if Line (I) = '=' then Eq := I; exit; end if;
                end loop;
                if Eq > Line'First and then Eq < Line'Last then
                   declare
-                     Key : constant String :=
-                       Line (Line'First .. Eq - 1);
-                     Val : constant String :=
-                       Line (Eq + 1 .. Line'Last);
+                     Key : constant String := Line (Line'First .. Eq - 1);
+                     Val : constant String := Line (Eq + 1 .. Line'Last);
                      CK  : Interfaces.C.Strings.chars_ptr :=
                        Interfaces.C.Strings.New_String (Key);
                      CV  : Interfaces.C.Strings.chars_ptr :=
@@ -85,7 +66,7 @@ procedure Main is
       end loop;
       Close (File);
    exception
-      when others => null;   -- .env errors are non-fatal
+      when others => null;
    end Load_Env;
 
    -- ── Resolve exe directory ──────────────────────────────────────────────
@@ -125,29 +106,27 @@ procedure Main is
    end Full_Path;
 
 begin
-   Put_Line ("BlackVideo Mini Player v2.3  (Ada + SDL2 + FFmpeg + Whisper)");
+   Put_Line ("BlackVideo Mini Player v2.4  (Ada + SDL2 + FFmpeg + Whisper + LLM)");
    New_Line;
 
-   -- Load .env from beside the exe (development workflow only).
-   -- In production releases, this file is absent and skipped silently.
+   -- Load .env (dev only; silently skipped in production)
    declare
-      Dir     : constant String := Exe_Dir;
+      Dir      : constant String := Exe_Dir;
       Env_Path : constant String :=
         (if Dir'Length > 0 then Dir & ".env" else ".env");
    begin
       Load_Env (Env_Path);
    end;
 
-   if Argument_Count = 0 then
-      Put_Line ("Usage:  blackvideo-player <video_file>");
-      Put_Line ("        blackvideo-player --help");
-      Set_Exit_Status (Failure);
-      return;
-   end if;
-
-   if Argument (1) = "--help" or else Argument (1) = "-help"
-      or else Argument (1) = "-h"
+   -- v2.4: --help still works; otherwise pass whatever path we have
+   -- (empty string "" → player enters No_Video / welcome screen state)
+   if Argument_Count > 0 and then
+      (Argument (1) = "--help" or else Argument (1) = "-help"
+       or else Argument (1) = "-h")
    then
+      Put_Line ("Usage:  blackvideo-player [video_file]");
+      Put_Line ("        (no argument → welcome screen / drag-and-drop)");
+      New_Line;
       Put_Line ("Keyboard controls:");
       Put_Line ("  SPACE        Play / Pause");
       Put_Line ("  LEFT/RIGHT   Seek -5 / +5 seconds");
@@ -161,8 +140,11 @@ begin
       Put_Line ("  Right-click → Generate Captions  (auto-detect language)");
       Put_Line ("  Right-click → Translate to English");
       Put_Line ("  Required: whisper-cli.exe + ggml-*.dll + model in build\");
-      Put_Line ("  Optional: set BLACKVIDEO_WHISPER_PATH and");
-      Put_Line ("            BLACKVIDEO_WHISPER_MODEL in .env (dev only)");
+      New_Line;
+      Put_Line ("LLM cloud captions:");
+      Put_Line ("  Right-click → Generate Captions (LLM) → choose provider");
+      Put_Line ("  Providers: Claude, OpenAI, Gemini, DeepSeek, Grok");
+      Put_Line ("  API keys stored in %APPDATA%\BlackVideo\keys.cfg");
       return;
    end if;
 
