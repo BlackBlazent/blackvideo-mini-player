@@ -23,7 +23,6 @@ with Ada.Directories;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with System;
-with System.Storage_Elements;
 
 with SDL;
 with SDL.Video;
@@ -46,7 +45,6 @@ package body Player is
    use Ada.Strings.Unbounded;
    use Interfaces.C;
    use System;
-   use System.Storage_Elements;
    use SDL.Events;
    use SDL.Events.Keyboards;
 
@@ -218,15 +216,14 @@ package body Player is
            " && del /q """ & Tmp_WAV & """ 2>nul" &
            """";
 
-         function WinExec (Cmd : Interfaces.C.Strings.chars_ptr;
-                           Show : unsigned) return unsigned
-         with Import, Convention => C, External_Name => "WinExec";
+         function C_System (Cmd : Interfaces.C.Strings.chars_ptr) return unsigned
+         with Import, Convention => C, External_Name => "system";
 
          CP  : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Batch_Cmd);
          Ret : unsigned;
       begin
-         Ret := WinExec (CP, 0);   -- 0 = SW_HIDE
+         Ret := C_System (CP);
          Interfaces.C.Strings.Free (CP);
 
          if Ret < 32 then

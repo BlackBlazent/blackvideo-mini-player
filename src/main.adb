@@ -4,29 +4,22 @@
 -- v2.4: no argument guard removed — passes "" so player shows welcome screen.
 
 with Ada.Command_Line;
+with Ada.Environment_Variables;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 with Ada.Directories;
-with Interfaces.C;
-with Interfaces.C.Strings;
 with System;
-with System.Storage_Elements;
 with Player;
 
 procedure Main is
    use Ada.Command_Line;
    use Ada.Strings.Unbounded;
    use Ada.Text_IO;
-   use Interfaces.C;
    use System;
-   use System.Storage_Elements;
 
    -- ── Load .env file ─────────────────────────────────────────────────────
    procedure Load_Env (Path : String) is
-      function SetEnvironmentVariableA
-        (Name, Value : Interfaces.C.Strings.chars_ptr) return int
-      with Import, Convention => C,
-           External_Name => "SetEnvironmentVariableA";
+
       File   : File_Type;
       Buffer : String (1 .. 2048);
       Last   : Natural;
@@ -47,18 +40,9 @@ procedure Main is
                   declare
                      Key : constant String := Line (Line'First .. Eq - 1);
                      Val : constant String := Line (Eq + 1 .. Line'Last);
-                     CK  : Interfaces.C.Strings.chars_ptr :=
-                       Interfaces.C.Strings.New_String (Key);
-                     CV  : Interfaces.C.Strings.chars_ptr :=
-                       Interfaces.C.Strings.New_String (Val);
-                     Ret : int;
                   begin
-                     Ret := SetEnvironmentVariableA (CK, CV);
-                     Interfaces.C.Strings.Free (CK);
-                     Interfaces.C.Strings.Free (CV);
-                     if Ret /= 0 then
-                        Put_Line ("[Env] " & Key & " = " & Val);
-                     end if;
+                     Ada.Environment_Variables.Set (Name => Key, Value => Val);
+                     Put_Line ("[Env] " & Key & " = " & Val);
                   end;
                end if;
             end if;
@@ -71,25 +55,9 @@ procedure Main is
 
    -- ── Resolve exe directory ──────────────────────────────────────────────
    function Exe_Dir return String is
-      function GetModuleFileNameA
-        (HModule : System.Address;
-         Buf     : System.Address;
-         Size    : unsigned) return unsigned
-      with Import, Convention => C, External_Name => "GetModuleFileNameA";
-      Buf : String (1 .. 1024) := (others => ASCII.NUL);
-      Len : unsigned;
    begin
-      Len := GetModuleFileNameA (System.Null_Address, Buf (1)'Address, 1023);
-      if Len = 0 then return ""; end if;
-      declare
-         Full : constant String := Buf (1 .. Integer (Len));
-         Last : Natural := Full'Last;
-      begin
-         while Last > Full'First and then
-               Full (Last) /= '\' and then Full (Last) /= '/'
-         loop Last := Last - 1; end loop;
-         return Full (Full'First .. Last);
-      end;
+      return
+        Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name);
    exception
       when others => return "";
    end Exe_Dir;
