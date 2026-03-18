@@ -1,9 +1,9 @@
 [Setup]
 AppName=BlackVideo
-AppVersion=2.2.0
+AppVersion=2.4.0
 DefaultDirName={pf}\BlackVideo
 DefaultGroupName=BlackVideo
-OutputBaseFilename=BlackVideo-v2.2.0
+OutputBaseFilename=BlackVideo-v2.4.0
 -Setup
 UninstallDisplayIcon={app}\blackvideo-player.exe
 
