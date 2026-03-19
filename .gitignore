@@ -6,13 +6,16 @@ __docs__/
 backup/
 .VSCodeCounter/
 dist/
+latest.json
 utils/
 build/
+build.bat
 test/
+contributing/
 release/
 Output/
 utils/
-samples/
+samples/someday.mp4
 lib/include/
 *.o
 *.ali
