@@ -3,14 +3,14 @@ AppName=BlackVideo
 AppVersion=2.4.0
 DefaultDirName={pf}\BlackVideo
 DefaultGroupName=BlackVideo
-OutputBaseFilename=BlackVideo-v2.4.0
--Setup
-UninstallDisplayIcon={app}\blackvideo-player.exe
+OutputBaseFilename=blackvideo-mini-player-v2.4.0-Setup
+UninstallDisplayIcon={app}\uninstall-blackvideo-mini-player.exe
 
 [Files]
 Source: "build\\blackvideo-player.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Remove the next line if no DLLs exist in build folder at compile time
 Source: "build\\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "build\\*.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
