@@ -28,6 +28,9 @@
 
 package Whisper_Bridge is
 
+   -- Return the player executable directory (includes trailing backslash)
+   function Exe_Dir return String;
+
    -- Resolve whisper-cli.exe path (returns "" if not found)
    function Find_Whisper return String;
 
