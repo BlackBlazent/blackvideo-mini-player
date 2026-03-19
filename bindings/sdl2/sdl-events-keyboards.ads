@@ -12,6 +12,7 @@ package SDL.Events.Keyboards is
    --  Printable keys
    SDLK_SPACE     : constant SDL_Keycode := 32;
    SDLK_a         : constant SDL_Keycode := 97;
+   SDLK_v         : constant SDL_Keycode := 118;
    SDLK_f         : constant SDL_Keycode := 102;
    SDLK_l         : constant SDL_Keycode := 108;
    SDLK_m         : constant SDL_Keycode := 109;
