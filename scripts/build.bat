@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ==========================================
-echo  BlackVideo Mini Player v2.3 - Windows Build
+echo  BlackVideo Mini Player v2.4 - Windows Build
 echo ==========================================
 echo.
 
@@ -18,20 +18,21 @@ if exist "blackvideo_player.gpr" (
 )
 echo.
 
-:: ROOT = full absolute path (handles spaces in path like "Vilma E. Agripo")
 set "ROOT=%CD%"
 
 :: ── Production vs Dev mode ──────────────────────────────────────────────────
-:: In production: no .env file needed. Whisper is resolved from build\ at runtime.
-:: In dev:        create build\.env with BLACKVIDEO_WHISPER_PATH and
-::                BLACKVIDEO_WHISPER_MODEL to override search paths.
 if exist "%ROOT%\.env" (
     echo [INFO] .env file found - development mode
     echo [INFO] Env vars will be loaded at runtime from .env
 ) else (
     echo [INFO] No .env file - production mode
-    echo [INFO] Whisper resolved from build\ at runtime
+    echo [INFO] Whisper / LLM keys resolved at runtime
 )
+echo.
+
+:: ── Thumbnail preview uses Windows WIC (built-in) — no stb_image needed ──────
+echo Thumbnail preview: Windows WIC (wincodec.dll — built into Windows 7+)
+echo   [OK] No external headers required for JPEG thumbnail decoding.
 echo.
 
 :: ── Delete stale .adb files ─────────────────────────────────────────────────
@@ -49,7 +50,6 @@ if exist "C:\gnat\2021\bin\gprbuild.exe" set "GPRBUILD=C:\gnat\2021\bin\gprbuild
 for %%D in ("C:\gnat\2022\bin" "C:\gnat\2023\bin" "C:\GNAT\bin") do (
     if exist "%%~D\gprbuild.exe" set "GPRBUILD=%%~D\gprbuild.exe" & goto :found_gprbuild
 )
-:: Search Alire toolchains
 for /d %%D in ("%LOCALAPPDATA%\alire\toolchains\gnat_native_*") do (
     if exist "%%~D\bin\gprbuild.exe" set "GPRBUILD=%%~D\bin\gprbuild.exe" & goto :found_gprbuild
 )
@@ -91,9 +91,9 @@ if exist "%ROOT%\lib\include\SDL2\SDL.h" (
     pause & exit /b 1
 )
 if exist "%ROOT%\lib\include\SDL2\SDL_ttf.h" (
-    echo   [OK] SDL_ttf.h  --  lib\include\SDL2\SDL_ttf.h
+    echo   [OK] SDL_ttf.h
 ) else if exist "%ROOT%\lib\include\SDL_ttf.h" (
-    echo   [OK] SDL_ttf.h  --  lib\include\SDL_ttf.h
+    echo   [OK] SDL_ttf.h
 ) else (
     echo   WARNING: SDL_ttf.h not found - UI overlay may not compile
 )
@@ -127,29 +127,30 @@ echo.
 
 :: ── Optional: check Whisper assets (non-fatal) ──────────────────────────────
 echo Checking Whisper assets (optional) ...
-set "WHISPER_OK=0"
 if exist "%ROOT%\build\whisper-cli.exe" (
     echo   [OK] whisper-cli.exe found in build\
-    set "WHISPER_OK=1"
 ) else (
-    echo   [INFO] whisper-cli.exe not in build\ - set BLACKVIDEO_WHISPER_PATH in .env or place beside exe
+    echo   [INFO] whisper-cli.exe not in build\ - set BLACKVIDEO_WHISPER_PATH in .env
 )
 if exist "%ROOT%\build\models\ggml-base.bin" (
     echo   [OK] ggml-base.bin found in build\models\
 ) else if exist "%ROOT%\build\ggml-base.bin" (
     echo   [OK] ggml-base.bin found in build\
 ) else (
-    echo   [INFO] ggml-base.bin not found - set BLACKVIDEO_WHISPER_MODEL in .env or place in build\models\
+    echo   [INFO] ggml-base.bin not found - set BLACKVIDEO_WHISPER_MODEL in .env
 )
 echo.
 
 :: ── Create build dirs ────────────────────────────────────────────────────────
 if not exist "%ROOT%\build\obj" mkdir "%ROOT%\build\obj"
+if not exist "%ROOT%\build\cache" mkdir "%ROOT%\build\cache"
 
-:: Remove stale ui_overlay.o
-if exist "%ROOT%\build\obj\ui_overlay.o" (
-    del /q "%ROOT%\build\obj\ui_overlay.o"
-    echo [FIX] Deleted stale build\obj\ui_overlay.o
+:: Remove stale objects that must be recompiled
+for %%F in (ui_overlay_c.o process_helpers.o thumb_preview_c.o llm_client_c.o) do (
+    if exist "%ROOT%\build\obj\%%F" (
+        del /q "%ROOT%\build\obj\%%F"
+        echo [FIX] Deleted stale build\obj\%%F
+    )
 )
 
 :: ── STEP 1: Compile ffmpeg_helpers.c ────────────────────────────────────────
@@ -165,13 +166,38 @@ echo.
 echo Compiling csrc\ui_overlay.c ...
 "%GCC%" -O2 -c "%ROOT%\csrc\ui_overlay.c" ^
     %SDL_I1% %SDL_I2% ^
+    -I"%ROOT%\include" ^
     -o "%ROOT%\build\obj\ui_overlay_c.o"
 if errorlevel 1 ( echo. & echo FAILED: ui_overlay.c & pause & exit /b 1 )
-if not exist "%ROOT%\build\obj\ui_overlay_c.o" ( echo. & echo FAILED: ui_overlay_c.o not created & pause & exit /b 1 )
 echo   [OK] build\obj\ui_overlay_c.o
 echo.
 
-:: ── STEP 3: Build Ada + link ──────────────────────────────────────────────────
+:: ── STEP 3: Compile csrc\process_helpers.c ──────────────────────────────────
+echo Compiling csrc\process_helpers.c ...
+"%GCC%" -O2 -c "%ROOT%\csrc\process_helpers.c" ^
+    -o "%ROOT%\build\obj\process_helpers.o"
+if errorlevel 1 ( echo. & echo FAILED: process_helpers.c & pause & exit /b 1 )
+echo   [OK] build\obj\process_helpers.o
+echo.
+
+:: ── STEP 4: Compile csrc\thumb_preview.c ────────────────────────────────────
+echo Compiling csrc\thumb_preview.c ...
+"%GCC%" -O2 -c "%ROOT%\csrc\thumb_preview.c" ^
+    %SDL_I1% %SDL_I2% ^
+    -o "%ROOT%\build\obj\thumb_preview_c.o"
+if errorlevel 1 ( echo. & echo FAILED: thumb_preview.c & pause & exit /b 1 )
+echo   [OK] build\obj\thumb_preview_c.o
+echo.
+
+:: ── STEP 5: Compile csrc\llm_client.c ───────────────────────────────────────
+echo Compiling csrc\llm_client.c ...
+"%GCC%" -O2 -c "%ROOT%\csrc\llm_client.c" ^
+    -o "%ROOT%\build\obj\llm_client_c.o"
+if errorlevel 1 ( echo. & echo FAILED: llm_client.c & pause & exit /b 1 )
+echo   [OK] build\obj\llm_client_c.o
+echo.
+
+:: ── STEP 6: Build Ada + link ──────────────────────────────────────────────────
 echo Building Ada sources and linking ...
 echo.
 "%GPRBUILD%" -P blackvideo_player.gpr -XOS_TARGET=windows -j0
@@ -195,36 +221,48 @@ for %%F in (SDL2.dll SDL2_ttf.dll libfreetype-6.dll zlib1.dll avcodec-62.dll avd
     if exist "%ROOT%\lib\%%F" ( copy /y "%ROOT%\lib\%%F" "%ROOT%\build\%%F" >nul & echo   Copied %%F )
 )
 
-:: ── Copy Whisper DLLs to build\ if present ──────────────────────────────────
+:: ── Copy Whisper DLLs if present ─────────────────────────────────────────────
 echo.
-echo Checking for Whisper DLLs to copy ...
+echo Checking for Whisper DLLs ...
 for %%F in (whisper.dll ggml.dll ggml-base.dll ggml-cpu.dll) do (
     if exist "%ROOT%\lib\%%F" ( copy /y "%ROOT%\lib\%%F" "%ROOT%\build\%%F" >nul & echo   Copied %%F )
 )
 
-:: ── Create .env template if none exists ─────────────────────────────────────
+:: ── Create .env.example if not exists ────────────────────────────────────────
 if not exist "%ROOT%\.env" (
     echo.
-    echo Creating .env.example (rename to .env for dev overrides) ...
+    echo Creating .env.example ...
     (
-        echo # BlackVideo Mini Player - Development overrides
-        echo # This file is loaded at runtime in dev mode only.
-        echo # In a release build, delete this file - paths resolve automatically.
+        echo # BlackVideo Mini Player v2.4 - Development overrides
+        echo # Rename to .env for dev mode. Delete for production.
         echo #
-        echo # Uncomment and set these if whisper-cli.exe is not beside the player exe:
-        echo # BLACKVIDEO_WHISPER_PATH=C:\path\to\whisper-bin-x64\whisper-cli.exe
-        echo # BLACKVIDEO_WHISPER_MODEL=C:\path\to\whisper-bin-x64\models\ggml-base.bin
+        echo # Whisper path overrides:
+        echo # BLACKVIDEO_WHISPER_PATH=C:\path\to\whisper-cli.exe
+        echo # BLACKVIDEO_WHISPER_MODEL=C:\path\to\models\ggml-base.bin
     ) > "%ROOT%\.env.example"
     echo   Created .env.example
 )
 
 echo.
-echo ── Whisper setup reminder ───────────────────────────────────────────────
-echo   For offline captions, place these in build\ :
-echo     whisper-cli.exe  ggml.dll  ggml-base.dll  ggml-cpu.dll  whisper.dll
-echo     models\ggml-base.bin  (or set BLACKVIDEO_WHISPER_MODEL in .env)
-echo ─────────────────────────────────────────────────────────────────────────
+echo ── Setup reminders ─────────────────────────────────────────────────────
+echo   Whisper (offline captions):
+echo     Place in build\:  whisper-cli.exe  ggml.dll  ggml-base.dll  ggml-cpu.dll  whisper.dll
+echo     Place in build\models\:  ggml-base.bin
 echo.
-echo Run:  build\blackvideo-player.exe "C:\path\to\video.mp4"
+echo   LLM cloud captions:
+echo     API keys stored at runtime in %%APPDATA%%\BlackVideo\keys.cfg
+echo     Right-click in player to enter keys per provider.
+echo.
+echo   Thumbnail preview:
+echo     Requires ffmpeg.exe on PATH or in build\
+echo     Thumbnails cached in build\cache\
+echo.
+echo   Auto-updater:
+echo     Create latest.json in repo root (see docs)
+echo     Uses WinINet — no extra DLL needed
+echo ────────────────────────────────────────────────────────────────────────
+echo.
+echo Run:  build\blackvideo-player.exe
+echo  or:  build\blackvideo-player.exe "C:\path\to\video.mp4"
 echo.
 pause
