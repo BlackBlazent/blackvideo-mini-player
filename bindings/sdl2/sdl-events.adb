@@ -51,9 +51,11 @@ package body SDL.Events is
       return Read_S32 (E.Bytes, 20);
    end Window_Data2;
 
-   --  SDL_KeyboardEvent: scancode @ 16, sym @ 20
+   --  SDL_KeyboardEvent: scancode@16 sym@20 mod@24 (2 bytes LE)
    function Key_Sym      (E : SDL_Event) return int is (Read_S32 (E.Bytes, 20));
    function Key_Scancode (E : SDL_Event) return int is (Read_S32 (E.Bytes, 16));
+   function Key_Mod      (E : SDL_Event) return unsigned is
+     (unsigned (E.Bytes (24)) + unsigned (E.Bytes (25)) * 256);
 
    function Poll (E : out SDL_Event) return Boolean is
    begin
@@ -75,5 +77,24 @@ package body SDL.Events is
    -- ─── Mouse wheel (SDL_MouseWheelEvent) ────────────────────────────────
    -- Offsets: type@0 timestamp@4 windowID@8 which@12 x@16 y@20
    function Mouse_Wheel_Y (E : SDL_Event) return int is (Read_S32 (E.Bytes, 20));
+
+   -- ─── Text input (SDL_TextInputEvent) ─────────────────────────────────
+   -- Offsets: type@0 timestamp@4 windowID@8 text@8 (up to 32 UTF-8 bytes)
+   function Text_Chars (E : SDL_Event) return String is
+      Last : Natural := 8;
+   begin
+      while Last < 40 and then E.Bytes (Last) /= 0 loop
+         Last := Last + 1;
+      end loop;
+      if Last = 8 then return ""; end if;
+      declare
+         S : String (1 .. Last - 8);
+      begin
+         for I in S'Range loop
+            S (I) := Character'Val (E.Bytes (7 + I));
+         end loop;
+         return S;
+      end;
+   end Text_Chars;
 
 end SDL.Events;

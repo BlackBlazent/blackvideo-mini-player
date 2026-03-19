@@ -37,6 +37,7 @@ package SDL.Events is
    function Window_Data2    (E : SDL_Event) return int;
    function Key_Sym         (E : SDL_Event) return int;
    function Key_Scancode    (E : SDL_Event) return int;
+   function Key_Mod         (E : SDL_Event) return unsigned;  -- SDL_Keymod
 
    SDL_MOUSEBUTTONUP   : constant unsigned := 16#402#;
    SDL_MOUSEWHEEL      : constant unsigned := 16#403#;
@@ -56,6 +57,17 @@ package SDL.Events is
    function Mouse_Btn_Y  (E : SDL_Event) return int;
    -- SDL_MouseWheelEvent: y@20 (positive = scroll up)
    function Mouse_Wheel_Y (E : SDL_Event) return int;
+
+   SDL_TEXTINPUT       : constant unsigned := 16#303#;
+
+   -- ─── Text input field extractor (SDL_TextInputEvent.text at offset 8) ──
+   --  Returns the UTF-8 character(s) typed (up to 4 bytes + NUL).
+   function Text_Chars (E : SDL_Event) return String;
+
+   -- SDL_Keymod bits (mod field of SDL_KeyboardEvent)
+   KMOD_LCTRL  : constant unsigned := 16#0040#;
+   KMOD_RCTRL  : constant unsigned := 16#0080#;
+   KMOD_CTRL   : constant unsigned := 16#00C0#;  -- either Ctrl
 
    -- ─── Poll ─────────────────────────────────────────────────────────────
    function Poll (E : out SDL_Event) return Boolean;
