@@ -1,7 +1,7 @@
--- blackvideo_player.gpr  v2.3
--- Pure Ada project. C files compiled separately in build.bat.
--- ui_overlay.c lives in csrc/ (not src/) so gprbuild ignores it.
--- The C .o files are passed directly to the linker.
+-- blackvideo_player.gpr  v2.4
+-- Ada project file. C files compiled separately by build.bat / build.sh.
+-- New in v2.4: process_helpers.o, thumb_preview_c.o, llm_client_c.o
+--              linker: -lwininet (Windows only)
 
 project BlackVideo_Player is
 
@@ -14,7 +14,7 @@ project BlackVideo_Player is
       "bindings/sdl2"
    );
 
-   for Languages use ("Ada");   -- Ada only; C compiled separately
+   for Languages use ("Ada");   -- C compiled separately
 
    for Object_Dir use "build/obj";
    for Exec_Dir   use "build";
@@ -28,15 +28,15 @@ project BlackVideo_Player is
    end Compiler;
 
    -- ── Linker ────────────────────────────────────────────────────────────
-   -- ffmpeg_helpers.o  — compiled from src/ffmpeg_helpers.c  by build.bat
-   -- ui_overlay_c.o    — compiled from csrc/ui_overlay.c     by build.bat
-   -- resources/blackvideo.o — Windows icon/manifest (windres)
    package Linker is
       case OS is
          when "windows" =>
             for Switches ("Ada") use (
                project'Project_Dir & "build/obj/ffmpeg_helpers.o",
                project'Project_Dir & "build/obj/ui_overlay_c.o",
+               project'Project_Dir & "build/obj/process_helpers.o",
+               project'Project_Dir & "build/obj/thumb_preview_c.o",
+               project'Project_Dir & "build/obj/llm_client_c.o",
                project'Project_Dir & "resources/blackvideo.o",
                "-L" & project'Project_Dir & "lib",
                "-lSDL2main",
@@ -44,7 +44,8 @@ project BlackVideo_Player is
                "-lSDL2",
                "-lavcodec", "-lavformat", "-lavutil",
                "-lswscale", "-lswresample",
-               "-lole32", "-loleaut32", "-lwinmm",
+               "-lwininet",
+               "-lwindowscodecs", "-lole32", "-loleaut32", "-lwinmm",
                "-lversion", "-limm32", "-lsetupapi", "-luuid",
                "-lgdi32", "-lusp10", "-lrpcrt4",
                "-Wl,--subsystem,console"
@@ -53,6 +54,9 @@ project BlackVideo_Player is
             for Switches ("Ada") use (
                project'Project_Dir & "build/obj/ffmpeg_helpers.o",
                project'Project_Dir & "build/obj/ui_overlay_c.o",
+               project'Project_Dir & "build/obj/process_helpers.o",
+               project'Project_Dir & "build/obj/thumb_preview_c.o",
+               project'Project_Dir & "build/obj/llm_client_c.o",
                "-L" & project'Project_Dir & "lib",
                "-lSDL2_ttf", "-lSDL2",
                "-lavcodec", "-lavformat", "-lavutil",
@@ -63,6 +67,9 @@ project BlackVideo_Player is
             for Switches ("Ada") use (
                project'Project_Dir & "build/obj/ffmpeg_helpers.o",
                project'Project_Dir & "build/obj/ui_overlay_c.o",
+               project'Project_Dir & "build/obj/process_helpers.o",
+               project'Project_Dir & "build/obj/thumb_preview_c.o",
+               project'Project_Dir & "build/obj/llm_client_c.o",
                "-L" & project'Project_Dir & "lib",
                "-lSDL2_ttf", "-lSDL2",
                "-lavcodec", "-lavformat", "-lavutil",
