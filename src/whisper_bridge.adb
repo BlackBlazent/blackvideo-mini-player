@@ -7,6 +7,7 @@
 --   * The user just drops whisper-cli.exe + ggml-*.dll + model into build\.
 --   * Models are swappable at any time by changing BLACKVIDEO_WHISPER_MODEL.
 
+with Ada.Command_Line;
 with Ada.Text_IO;
 with Ada.Directories;
 with Interfaces.C;
@@ -95,32 +96,11 @@ package body Whisper_Bridge is
       return Buf;
    end Read_Cmd_Line;
 
-   -- Resolve the player executable directory (Windows: uses GetModuleFileName).
+   -- Resolve the player executable directory.
    function Exe_Dir return String is
-      function GetModuleFileNameA
-        (HModule : System.Address;
-         Buf     : System.Address;
-         Size    : unsigned) return unsigned
-      with Import, Convention => C, External_Name => "GetModuleFileNameA";
-
-      Buf  : String (1 .. 1024) := (others => ASCII.NUL);
-      Len  : unsigned;
    begin
-      Len := GetModuleFileNameA (System.Null_Address, Buf (1)'Address, 1023);
-      if Len = 0 then return ""; end if;
-      -- Strip filename, keep directory
-      declare
-         Full : constant String := Buf (1 .. Integer (Len));
-         Last : Natural := Full'Last;
-      begin
-         while Last > Full'First and then
-               Full (Last) /= '\' and then Full (Last) /= '/'
-         loop
-            Last := Last - 1;
-         end loop;
-         if Last = 0 then return ""; end if;
-         return Full (Full'First .. Last);  -- includes trailing slash
-      end;
+      return
+        Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name);
    exception
       when others => return "";
    end Exe_Dir;

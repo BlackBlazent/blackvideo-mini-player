@@ -34,7 +34,6 @@ with Ada.Directories;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with System;
-with System.Storage_Elements;
 
 with SDL;
 with SDL.Video;
@@ -60,7 +59,6 @@ package body Player is
    use Ada.Strings.Unbounded;
    use Interfaces.C;
    use System;
-   use System.Storage_Elements;
    use SDL.Events;
    use SDL.Events.Keyboards;
 
