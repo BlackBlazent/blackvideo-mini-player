@@ -43,6 +43,15 @@ Lightweight cross-platform video player (Ada + SDL2 + FFmpeg). Support player fo
   <img src="https://img.shields.io/badge/BlackVideo-Utilities-000000?style=for-the-badge" />
 </p>
 
+<p align="center">
+  <!-- Big Total Downloads -->
+  <img src="https://img.shields.io/github/downloads/BlackBlazent/blackvideo-mini-player/total?style=for-the-badge&label=Total%20Downloads" />
+  <p align="center">
+  <!-- Small Latest Release Downloads -->
+  <img src="https://img.shields.io/github/downloads/BlackBlazent/blackvideo-mini-player/latest/total?label=Latest%20Release" />
+  </p>
+</p>
+
 ---
 
 <img src="./public/new_screenshot.png" alt="Screenshot"/>
